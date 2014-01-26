@@ -57,9 +57,16 @@ let bind_class k c env =
 let lookup_superclasses pos k env =
   (lookup_class pos k env).superclasses
 
+(** ! Modified ! *)
 let is_superclass pos k1 k2 env =
-  (* Student! This is your job! *)
-  true
+  let sclasses = lookup_superclasses pos k1 env in
+  if !Misc.debug then
+    begin
+      Format.printf "function is_superclass@.";
+      List.iter (function TName name -> Format.printf "%s; " name) sclasses;
+      Format.printf "@."
+    end;
+  List.mem k2 sclasses
 
 let bind_type_variable t env =
   bind_type t KStar (TypeDef (undefined_position, KStar, t, DAlgebraic [])) env
@@ -87,4 +94,3 @@ let initial =
     (TName "char", KStar);
     (TName "unit", KStar)
   ]
-

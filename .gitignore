@@ -7,3 +7,10 @@
 *.cmx
 *.cmxs
 *.cmxa
+parsing/lexer.ml
+parsing/parser.ml
+parsing/pprint-20130324/src/_build/
+*~
+test/*
+joujou
+.depend

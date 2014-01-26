@@ -24,12 +24,15 @@ and block env = function
     ([BDefinition d], env)
 
   | BClassDefinition c ->
-    (** Class definitions are ignored. Student! This is your job! *)
-    ([], env)
+    let env = class_definition env c in
+    ([BClassDefinition c], env)
 
   | BInstanceDefinitions is ->
     (** Instance definitions are ignored. Student! This is your job! *)
     ([], env)
+
+(* Type definitions *)
+
 
 and type_definitions env (TypeDefs (_, tdefs)) =
   let env = List.fold_left env_of_type_definition env tdefs in
@@ -405,3 +408,27 @@ and is_value_form = function
   | _ ->
     false
 
+(* Class definition *)
+
+and class_definition env c =
+  if !Misc.debug then begin
+    Format.printf "In class_definition@.";
+    List.iter (function TName n -> Format.printf "%s; " n) c.superclasses;
+    Format.printf "@." end;
+  check_superclasses env c;
+  bind_class c.class_name c env
+
+and check_superclasses env c =
+  let pos = c.class_position in
+  List.iter (unrelated_classes pos env c.superclasses) c.superclasses
+
+and unrelated_classes pos env classes c =
+  let TName n1 = c in
+  List.iter (fun ((TName n2) as tname) ->
+      if !Misc.debug then Format.printf "Testing %s with %s@." n1 n2;
+      if is_superclass pos c tname env then
+        let k1 = lookup_class pos tname env in
+        let k2 = lookup_class pos c env in
+        if k1.class_parameter = k2.class_parameter then failwith "Related classes"
+    )
+    classes
