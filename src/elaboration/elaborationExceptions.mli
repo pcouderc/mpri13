@@ -107,3 +107,13 @@ exception InvalidRecordInstantiation of position
 (** [OverloadedSymbolCannotBeBound] is raised when an overloaded
     symbol is introduced by a let. *)
 exception OverloadedSymbolCannotBeBound of Positions.position * name
+
+(** {Added for typeclasses} *)
+
+(** [RelatedClasses] is raised when two superclasses are related to each
+    other. *)
+exception RelatedClasses of position * tname * tname
+
+(** [SuperclassParameterDifferent] is raised when a superclasses' parameter is
+  different from the class using it. *)
+exception SuperclassParameterDifferent of position * tname * tname

@@ -423,7 +423,10 @@ and check_superclasses env c =
   let pos = c.class_position in
   let rec iter = function
     | [] -> ()
-    | cl :: t -> unrelated_classes pos env t cl; iter t
+    | cl :: t ->
+      unrelated_classes pos env t cl;
+      check_class_param pos env cl c.class_parameter;
+      iter t
   in
   iter c.superclasses
 
@@ -432,11 +435,14 @@ and unrelated_classes pos env classes c =
   List.iter (fun ((TName n2) as tname) ->
       if !Misc.debug then Format.printf "Testing %s with %s@." n1 n2;
       if is_superclass pos tname c env || c = tname then
-        let k1 = lookup_class pos tname env in
-        let k2 = lookup_class pos c env in
-        if k1.class_parameter = k2.class_parameter then failwith "Related classes"
+        raise (RelatedClasses (pos, c, tname))
     )
     classes
+
+and check_class_param pos env cl_name param =
+  let sc_param = (lookup_class pos cl_name env).class_parameter in
+  if not (sc_param = param) then
+    raise (SuperclassParameterDifferent (pos, sc_param, param))
 
 and check_members env param = function
   | [] -> ()

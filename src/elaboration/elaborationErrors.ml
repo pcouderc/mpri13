@@ -121,3 +121,13 @@ let handle_error f =
       fatal' pos (Printf.sprintf
                    "  Identifier `%s' cannot be both overloaded and let-bound."
                    x)
+
+    | RelatedClasses (pos, TName c1, TName c2) ->
+      fatal' pos (Printf.sprintf
+                    "  The classes %s and %s cannot be used as superclasses together."
+                    c1 c2)
+
+    | SuperclassParameterDifferent (pos, TName p1, TName p2) ->
+      fatal' pos (Printf.sprintf
+                    "  A superclass can only define the same type parameter as\
+      the class using it.")
