@@ -416,19 +416,28 @@ and class_definition env c =
     List.iter (function TName n -> Format.printf "%s; " n) c.superclasses;
     Format.printf "@." end;
   check_superclasses env c;
+  check_members env c.class_parameter c.class_members;
   bind_class c.class_name c env
 
 and check_superclasses env c =
   let pos = c.class_position in
-  List.iter (unrelated_classes pos env c.superclasses) c.superclasses
+  let rec iter = function
+    | [] -> ()
+    | cl :: t -> unrelated_classes pos env t cl; iter t
+  in
+  iter c.superclasses
 
 and unrelated_classes pos env classes c =
   let TName n1 = c in
   List.iter (fun ((TName n2) as tname) ->
       if !Misc.debug then Format.printf "Testing %s with %s@." n1 n2;
-      if is_superclass pos c tname env then
+      if is_superclass pos tname c env || c = tname then
         let k1 = lookup_class pos tname env in
         let k2 = lookup_class pos c env in
         if k1.class_parameter = k2.class_parameter then failwith "Related classes"
     )
     classes
+
+and check_members env param = function
+  | [] -> ()
+  | (_, _, ty) :: l -> check_wf_scheme env [param] ty; check_members env param l
