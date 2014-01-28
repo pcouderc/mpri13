@@ -45,8 +45,8 @@ PPRINT = parsing/pprint-20130324/src
 
 SRC_INCLUDES = -I parsing -I inference -I elaboration -I common
 INCLUDES = -I $(PPRINT)/_build $(SRC_INCLUDES)
-BFLAGS = -dtypes -g $(INCLUDES)
-OFLAGS = -g $(INCLUDES)
+BFLAGS = -dtypes -g -bin-annot $(INCLUDES)
+OFLAGS = -g -bin-annot $(INCLUDES)
 BLIBS  = $(PPRINT)/_build/PPrintLib.cma
 OLIBS  = $(PPRINT)/_build/PPrintLib.cmxa
 

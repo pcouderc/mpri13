@@ -1,4 +1,5 @@
 open String
+
 open Name
 open XAST
 open Types
@@ -28,7 +29,8 @@ and block env = function
     ([BClassDefinition c], env)
 
   | BInstanceDefinitions is ->
-    (** Instance definitions are ignored. Student! This is your job! *)
+    (* List.iter (instance_pretty_print env) is; *)
+    let env = instance_definitions env is in
     ([], env)
 
 (* Type definitions *)
@@ -410,8 +412,10 @@ and is_value_form = function
 
 (* Class definition *)
 
+and debug = ref false
+
 and class_definition env c =
-  if !Misc.debug then begin
+  if !debug then begin
     Format.printf "In class_definition@.";
     List.iter (function TName n -> Format.printf "%s; " n) c.superclasses;
     Format.printf "@." end;
@@ -435,7 +439,7 @@ and check_superclasses env c =
 and unrelated_classes pos env classes c =
   let TName n1 = c in
   List.iter (fun ((TName n2) as tname) ->
-      if !Misc.debug then Format.printf "Testing %s with %s@." n1 n2;
+      if !debug then Format.printf "Testing %s with %s@." n1 n2;
       if is_superclass pos tname c env || c = tname then
         raise (RelatedClasses (pos, c, tname))
     )
@@ -460,3 +464,56 @@ and check_superclasses_members env sclasses (pos, n, _) =
       sclass.class_members
   in
   List.iter already_defined sclasses
+
+
+(* Instances definitions *)
+
+(* and instance_pretty_print env ins = *)
+(*   let params = List.fold_left *)
+(*       (fun acc (TName n) -> acc ^ "; " ^ n) "" ins.instance_parameters in *)
+(*   let typing_context = List.fold_left *)
+(*       (fun acc (ClassPredicate (TName n1, TName n2)) -> *)
+(*          Format.sprintf "%s; %s: %s" acc n1 n2) "" ins.instance_typing_context *)
+(*   in *)
+(*   let TName class_name = ins.instance_class_name in *)
+(*   let index = match ins.instance_index with  *)
+(*     | in *)
+(*   let record_binding = List.fold_left *)
+(*       (fun acc (RecordBinding (LName n, _)) -> *)
+(*          Format.sprintf "%s; %s" acc n) "" ins.instance_members in *)
+(*   Format.printf "Instance: @.\ *)
+(*     class_name: %s@.\ *)
+(*     parameters: [ %s ]@.\ *)
+(*     typing_context: [ %s ]@.\ *)
+(*     index: %s@.\ *)
+(*     record_binding: [ %s ]@." *)
+(*     class_name params typing_context index record_binding *)
+
+and instance_definitions env = function
+  | [] -> env
+  | ins :: t -> let env = instance_definition env ins in
+    instance_definitions env t
+
+and instance_definition env instance =
+  check_instance_members env instance; env
+
+and check_instance_members env ins =
+  let pos = ins.instance_position in
+  (* let index = ins.instance_index in *)
+  let class_ = lookup_class pos ins.instance_class_name env in
+  let class_members = class_.class_members in
+  List.iter2 (fun (pos, lname, mltype) (RecordBinding (LName n, expr)) ->
+      let _, ty = expression env expr in
+      let r_type = reconstruct_type ins in
+      let mltype = substitute [class_.class_parameter, r_type] mltype in
+      if not @@ equivalent mltype ty then
+        raise (IncompatibleTypes (pos, ty, mltype))
+    ) class_members ins.instance_members
+
+and reconstruct_type ins =
+  let pos = ins.instance_position in
+  let type_parameters =
+    List.map (fun tname -> TyVar (pos, tname)) ins.instance_parameters in
+  TyApp (ins.instance_position, ins.instance_index, type_parameters)
+
+(* and check *)

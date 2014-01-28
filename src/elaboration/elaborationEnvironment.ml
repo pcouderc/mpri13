@@ -11,7 +11,10 @@ type t = {
   labels       : (lname * (tnames * Types.t * tname)) list;
 }
 
-let empty = { values = []; types = []; classes = []; labels = [] }
+let empty = { values = [];
+              types = [];
+              classes = [];
+              labels = [] }
 
 let values env = env.values
 
@@ -86,6 +89,18 @@ let bind_label pos l ts ty rtcon env =
     raise (LabelAlreadyTaken (pos, l))
   with UnboundLabel _ ->
     { env with labels = (l, (ts, ty, rtcon)) :: env.labels }
+
+(* let lookup_instance pos  *)
+
+(* let bind_instance l ins env = *)
+(*   let classname = ins.instance_class_name in *)
+(*   let params = ins.instance_parameters in *)
+(*   try *)
+(*     let pos = ins.instance_position in *)
+(*     ignore (lookup_instance pos ins env); *)
+(*     raise (AlreadyDefinedInstance (pos, classname, params)) *)
+(*   with *)
+(*   | UnboundInstance _ -> { env with instances = ins :: instances } *)
 
 let initial =
   let primitive_type t k = TypeDef (undefined_position, k, t, DAlgebraic []) in
