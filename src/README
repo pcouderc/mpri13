@@ -1,0 +1,12 @@
+Mini Haskell
+
+This is a project for the course 2-4: Functionnal Programming and Type Systems
+of the MPRI. The aim is to extend a simple ML implementation with typeclasses.
+
+What has been modified so far:
+- elaboration
+  - elaborationException.ml{i} and elaborationErrors.ml{i} for handling
+  typeclasses typing errors
+  - elaborateDictionaries.ml for classes and instance typing
+  - elaborateEnvironment.ml{i} for classes and instance typing environment
+
