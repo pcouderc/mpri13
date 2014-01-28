@@ -57,6 +57,9 @@ let bind_class k c env =
 let lookup_superclasses pos k env =
   (lookup_class pos k env).superclasses
 
+let lookup_classes_definition pos lnames env =
+  List.map (fun k -> lookup_class pos k env) lnames
+
 (** ! Modified ! *)
 let is_superclass pos k1 k2 env =
   let sclasses = lookup_superclasses pos k1 env in

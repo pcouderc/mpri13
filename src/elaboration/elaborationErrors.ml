@@ -131,3 +131,8 @@ let handle_error f =
       fatal' pos (Printf.sprintf
                     "  A superclass can only define the same type parameter as\
       the class using it.")
+
+    | FunctionDefinedInSClass (pos, TName cname, LName fname) ->
+      fatal' pos (Printf.sprintf
+                    "  The function %s is already defined in the superclass %s."
+                    fname cname)

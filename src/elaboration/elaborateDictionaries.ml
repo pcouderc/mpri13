@@ -415,8 +415,10 @@ and class_definition env c =
     Format.printf "In class_definition@.";
     List.iter (function TName n -> Format.printf "%s; " n) c.superclasses;
     Format.printf "@." end;
+  let sclasses =
+    lookup_classes_definition c.class_position c.superclasses env in
   check_superclasses env c;
-  check_members env c.class_parameter c.class_members;
+  check_members env sclasses c.class_parameter c.class_members;
   bind_class c.class_name c env
 
 and check_superclasses env c =
@@ -444,6 +446,17 @@ and check_class_param pos env cl_name param =
   if not (sc_param = param) then
     raise (SuperclassParameterDifferent (pos, sc_param, param))
 
-and check_members env param = function
+and check_members env sclasses param = function
   | [] -> ()
-  | (_, _, ty) :: l -> check_wf_scheme env [param] ty; check_members env param l
+  | (pos, n, ty) as func :: l ->
+    check_wf_scheme env [param] ty;
+    check_superclasses_members env sclasses func;
+    check_members env sclasses param l
+
+and check_superclasses_members env sclasses (pos, n, _) =
+  let already_defined sclass =
+    List.iter (fun (_, sc_f, _) -> if sc_f = n then
+          raise (FunctionDefinedInSClass (pos, sclass.class_name, sc_f)))
+      sclass.class_members
+  in
+  List.iter already_defined sclasses

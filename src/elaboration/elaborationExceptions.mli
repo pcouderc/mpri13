@@ -117,3 +117,7 @@ exception RelatedClasses of position * tname * tname
 (** [SuperclassParameterDifferent] is raised when a superclasses' parameter is
   different from the class using it. *)
 exception SuperclassParameterDifferent of position * tname * tname
+
+(** [FunctionDefinedInSClass] is raised when a class defines a function with the
+  same name as one in its superclasses *)
+exception FunctionDefinedInSClass of position * tname * lname
