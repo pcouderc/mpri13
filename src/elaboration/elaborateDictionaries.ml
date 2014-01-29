@@ -499,21 +499,40 @@ and instance_definition env instance =
 
 and check_instance_members env ins =
   let pos = ins.instance_position in
-  (* let index = ins.instance_index in *)
   let class_ = lookup_class pos ins.instance_class_name env in
   let class_members = class_.class_members in
+  let env = extended_env env ins class_ in
   List.iter2 (fun (pos, lname, mltype) (RecordBinding (LName n, expr)) ->
       let _, ty = expression env expr in
       let r_type = reconstruct_type ins in
+      check_reconstructed_type_arity env r_type;
       let mltype = substitute [class_.class_parameter, r_type] mltype in
       if not @@ equivalent mltype ty then
         raise (IncompatibleTypes (pos, ty, mltype))
     ) class_members ins.instance_members
+
+and extended_env env ins class_ =
+  let class_members = class_.class_members in
+  let env = List.fold_left
+      (fun env tname -> bind_type_variable tname env)
+      env ins.instance_parameters in
+  List.fold_left
+    (fun env (pos, (LName name), mltype) ->
+       bind_scheme (Name name) [class_.class_parameter] mltype env) env class_members
+
 
 and reconstruct_type ins =
   let pos = ins.instance_position in
   let type_parameters =
     List.map (fun tname -> TyVar (pos, tname)) ins.instance_parameters in
   TyApp (ins.instance_position, ins.instance_index, type_parameters)
+
+and check_reconstructed_type_arity env = function
+  | (TyApp (pos, tname, params)) ->
+    let kind = lookup_type_kind pos tname env in
+    if kind_of_arity (List.length params) <> kind then
+      raise (InvalidTypeApplication pos)
+  | _ -> assert false
+
 
 (* and check *)
