@@ -29,7 +29,6 @@ and block env = function
     ([BClassDefinition c], env)
 
   | BInstanceDefinitions is ->
-    (* List.iter (instance_pretty_print env) is; *)
     let env = instance_definitions env is in
     ([], env)
 
@@ -468,10 +467,15 @@ and check_superclasses_members env sclasses (pos, n, _) =
 
 (* Instances definitions *)
 
-and instance_definitions env = function
+and instance_definitions env instances =
+  let env = List.fold_left
+      (fun env ins -> bind_instance ins env) env instances in
+  let step env = function
   | [] -> env
   | ins :: t -> let env = instance_definition env ins in
     instance_definitions env t
+  in
+  step env instances
 
 and instance_definition env instance =
   check_instance_members env instance; env
