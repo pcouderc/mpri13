@@ -121,3 +121,11 @@ exception SuperclassParameterDifferent of position * tname * tname
 (** [FunctionDefinedInSClass] is raised when a class defines a function with the
   same name as one in its superclasses *)
 exception FunctionDefinedInSClass of position * tname * lname
+
+(** [UnboundInstance] is raised when an instance for a specific type of a class
+  is raised *)
+exception UnboundInstance of position * tname * tname
+
+(** [AlreadyDefinedInstance] is raised when a instance of a class for a specific
+  type has already defined *)
+exception AlreadyDefinedInstance of position * tname * tname

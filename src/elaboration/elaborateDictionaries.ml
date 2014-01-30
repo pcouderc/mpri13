@@ -468,27 +468,6 @@ and check_superclasses_members env sclasses (pos, n, _) =
 
 (* Instances definitions *)
 
-(* and instance_pretty_print env ins = *)
-(*   let params = List.fold_left *)
-(*       (fun acc (TName n) -> acc ^ "; " ^ n) "" ins.instance_parameters in *)
-(*   let typing_context = List.fold_left *)
-(*       (fun acc (ClassPredicate (TName n1, TName n2)) -> *)
-(*          Format.sprintf "%s; %s: %s" acc n1 n2) "" ins.instance_typing_context *)
-(*   in *)
-(*   let TName class_name = ins.instance_class_name in *)
-(*   let index = match ins.instance_index with  *)
-(*     | in *)
-(*   let record_binding = List.fold_left *)
-(*       (fun acc (RecordBinding (LName n, _)) -> *)
-(*          Format.sprintf "%s; %s" acc n) "" ins.instance_members in *)
-(*   Format.printf "Instance: @.\ *)
-(*     class_name: %s@.\ *)
-(*     parameters: [ %s ]@.\ *)
-(*     typing_context: [ %s ]@.\ *)
-(*     index: %s@.\ *)
-(*     record_binding: [ %s ]@." *)
-(*     class_name params typing_context index record_binding *)
-
 and instance_definitions env = function
   | [] -> env
   | ins :: t -> let env = instance_definition env ins in

@@ -34,3 +34,5 @@ exception OverloadedSymbolCannotBeBound of Positions.position * name
 exception RelatedClasses of position * tname * tname
 exception SuperclassParameterDifferent of position * tname * tname
 exception FunctionDefinedInSClass of position * tname * lname
+exception UnboundInstance of position * tname * tname
+exception AlreadyDefinedInstance of position * tname * tname

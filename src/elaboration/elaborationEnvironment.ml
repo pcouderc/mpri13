@@ -9,12 +9,15 @@ type t = {
   types        : (tname * (Types.kind * type_definition)) list;
   classes      : (tname * class_definition) list;
   labels       : (lname * (tnames * Types.t * tname)) list;
+  instances    : ((tname * tname) * instance_definition) list;
 }
 
 let empty = { values = [];
               types = [];
               classes = [];
-              labels = [] }
+              labels = [];
+              instances = []
+            }
 
 let values env = env.values
 
@@ -90,17 +93,26 @@ let bind_label pos l ts ty rtcon env =
   with UnboundLabel _ ->
     { env with labels = (l, (ts, ty, rtcon)) :: env.labels }
 
-(* let lookup_instance pos  *)
+let lookup_instance pos classname index env =
+  try
+    List.assoc (classname, index) env.instances
+  with Not_found ->
+    raise (UnboundInstance (pos, classname, index))
 
-(* let bind_instance l ins env = *)
-(*   let classname = ins.instance_class_name in *)
-(*   let params = ins.instance_parameters in *)
-(*   try *)
-(*     let pos = ins.instance_position in *)
-(*     ignore (lookup_instance pos ins env); *)
-(*     raise (AlreadyDefinedInstance (pos, classname, params)) *)
-(*   with *)
-(*   | UnboundInstance _ -> { env with instances = ins :: instances } *)
+let lookup_class_instances pos classname env =
+  List.fold_left
+    (fun acc ((cl, _), inst) -> if cl = classname then inst :: acc else acc)
+    [] env.instances
+
+let bind_instance ins env =
+  let classname = ins.instance_class_name in
+  let index = ins.instance_index in
+  try
+    let pos = ins.instance_position in
+    ignore (lookup_instance pos classname index env);
+    raise (AlreadyDefinedInstance (pos, classname, index))
+  with
+  | UnboundInstance _ -> { env with instances = ((classname, index), ins) :: env.instances }
 
 let initial =
   let primitive_type t k = TypeDef (undefined_position, k, t, DAlgebraic []) in
