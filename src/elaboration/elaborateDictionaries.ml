@@ -10,6 +10,9 @@ open ElaborationEnvironment
 
 let string_of_type ty      = ASTio.(XAST.(to_string pprint_ml_type ty))
 
+let string_of_instance ins =
+  match ins.instance_index, ins.instance_class_name with
+  | TName index, TName cn -> Format.sprintf "%s, %s;" index cn
 
 let rec program p = handle_error List.(fun () ->
   flatten (fst (Misc.list_foldmap block ElaborationEnvironment.initial p))
@@ -29,6 +32,7 @@ and block env = function
     ([BClassDefinition c], env)
 
   | BInstanceDefinitions is ->
+    (* List.iter (fun ins -> Format.printf "%s;" @@ string_of_instance ins) is; *)
     let env = instance_definitions env is in
     ([], env)
 
@@ -468,27 +472,38 @@ and check_superclasses_members env sclasses (pos, n, _) =
 (* Instances definitions *)
 
 and instance_definitions env instances =
-  let env = List.fold_left
-      (fun env ins -> bind_instance ins env) env instances in
-  let step env = function
+  let env = List.fold_left (fun env ins ->
+      bind_instance ins env) env instances in
+  let rec step env = function
   | [] -> env
   | ins :: t -> let env = instance_definition env ins in
-    instance_definitions env t
+    step env t
   in
   step env instances
 
 and instance_definition env instance =
-  check_instance_members env instance; env
+  check_superclasses_instances env instance;
+  check_instance_members env instance;
+  env
+
+and check_superclasses_instances env instance =
+  let pos = instance.instance_position in
+  let sclasses = lookup_superclasses pos instance.instance_class_name env in
+  let index = instance.instance_index in
+  List.iter (fun cl ->
+      try ignore (lookup_instance pos cl index env)
+      with e -> raise e) sclasses
+
 
 and check_instance_members env ins =
   let pos = ins.instance_position in
   let class_ = lookup_class pos ins.instance_class_name env in
   let class_members = class_.class_members in
-  let env = extended_env env ins class_ in
+  let xenv = extended_env env ins class_ in
   List.iter2 (fun (pos, lname, mltype) (RecordBinding (LName n, expr)) ->
-      let _, ty = expression env expr in
+      let _, ty = expression xenv expr in
       let r_type = reconstruct_type ins in
-      check_reconstructed_type_arity env r_type;
+      check_reconstructed_type_arity xenv r_type;
       let mltype = substitute [class_.class_parameter, r_type] mltype in
       if not @@ equivalent mltype ty then
         raise (IncompatibleTypes (pos, ty, mltype))

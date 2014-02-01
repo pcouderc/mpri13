@@ -45,6 +45,9 @@ val bind_type_variable : tname -> t -> t
 (** [lookup_class pos c e] returns the class_definition of [c] in [e]. *)
 val lookup_class : position -> tname -> t -> class_definition
 
+(** [lookup_superclasses pos c e] returns the superclasses of [c] in [e] *)
+val lookup_superclasses : position -> tname -> t -> tname list
+
 (** [lookup_classes_definitions pos cl e] returns each class definition of [cl]
   in [e] *)
 val lookup_classes_definition : position -> tname list -> t -> class_definition list

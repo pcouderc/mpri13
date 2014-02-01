@@ -94,6 +94,11 @@ let bind_label pos l ts ty rtcon env =
     { env with labels = (l, (ts, ty, rtcon)) :: env.labels }
 
 let lookup_instance pos classname index env =
+  (* if !Misc.debug then Format.printf ("In lookup@."); *)
+  (* let _s (TName name) = name in *)
+  (* List.iter (fun ((_,_),ins) -> *)
+  (*     Format.printf "%s, %s@." (_s ins.instance_class_name) (_s ins.instance_index)) *)
+  (*   env.instances; *)
   try
     List.assoc (classname, index) env.instances
   with Not_found ->
@@ -105,6 +110,7 @@ let lookup_class_instances pos classname env =
     [] env.instances
 
 let bind_instance ins env =
+  (* Format.printf ("In binding@."); *)
   let classname = ins.instance_class_name in
   let index = ins.instance_index in
   try

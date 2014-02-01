@@ -136,3 +136,11 @@ let handle_error f =
       fatal' pos (Printf.sprintf
                     "  The function %s is already defined in the superclass %s."
                     fname cname)
+    | AlreadyDefinedInstance (pos, TName cname, TName index) ->
+      fatal' pos (Printf.sprintf
+                    "  An instance of %s for type %s is already defined."
+                    cname index)
+    | UnboundInstance (pos, TName cname, TName index) ->
+      fatal' pos (Printf.sprintf
+                    "  The class %s has no instance defined for the type %s."
+                    cname index)
