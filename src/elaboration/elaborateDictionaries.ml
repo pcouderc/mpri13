@@ -28,8 +28,8 @@ and block env = function
     ([BDefinition d], env)
 
   | BClassDefinition c ->
-    let env = class_definition env c in
-    ([BClassDefinition c], env)
+    let defs, env = class_definition env c in
+    (defs, env)
 
   | BInstanceDefinitions is ->
     (* List.iter (fun ins -> Format.printf "%s;" @@ string_of_instance ins) is; *)
@@ -426,7 +426,8 @@ and class_definition env c =
     lookup_classes_definition c.class_position c.superclasses env in
   check_superclasses env c;
   check_members env sclasses c.class_parameter c.class_members;
-  bind_class c.class_name c env
+  let env = bind_class c.class_name c env in
+  elaborate_class env c
 
 and check_superclasses env c =
   let pos = c.class_position in
@@ -468,6 +469,33 @@ and check_superclasses_members env sclasses (pos, n, _) =
   in
   List.iter already_defined sclasses
 
+and elaborate_class env c =
+  (* What we need:
+     - Create a record type for the class
+     - Create a value for each class member
+  *)
+  let class_record, env = create_class_record env c in
+  class_record :: (* create_members env c *)[], env
+
+and create_class_record env c =
+  let pos = c.class_position in
+  let record_name = match c.class_name with
+    TName n -> TName ("class" ^ n)
+  in
+  let fields = List.fold_left (fun acc (TName sc) ->
+      let ty = TyApp
+          (pos, TName ("class" ^ sc), [TyVar (pos, c.class_parameter)]) in
+    (pos, LName ("sc_" ^ sc), ty) :: acc) c.class_members c.superclasses in
+  let record = TypeDefs (pos,
+                         [TypeDef (pos, kind_of_arity 1, record_name,
+                                   DRecordType ([c.class_parameter], fields))]) in
+  BTypeDefinitions record, type_definitions env record
+
+and create_members env c =
+  List.fold_left (fun acc m -> create_member env m :: acc) [] c.class_members
+
+and create_member env m =
+  assert false
 
 (* Instances definitions *)
 
