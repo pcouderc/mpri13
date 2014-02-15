@@ -413,6 +413,11 @@ and is_value_form = function
   | _ ->
     false
 
+(* Added for expression typing *)
+
+(* and extend_value_def env (ValueDef (pos, ts, ps, b, e)) = *)
+(*   List.fold_right  *)
+
 (* Class definition *)
 
 and debug = ref false
@@ -469,13 +474,16 @@ and check_superclasses_members env sclasses (pos, n, _) =
   in
   List.iter already_defined sclasses
 
+(* Class elaboration *)
+
 and elaborate_class env c =
   (* What we need:
      - Create a record type for the class
      - Create a value for each class member
   *)
   let class_record, env = create_class_record env c in
-  class_record :: (* create_members env c *)[], env
+  let members, env = create_members env c in
+  class_record :: members, env
 
 and create_class_record env c =
   let pos = c.class_position in
@@ -483,19 +491,53 @@ and create_class_record env c =
     TName n -> TName ("class" ^ n)
   in
   let fields = List.fold_left (fun acc (TName sc) ->
+      let sc_field = class_typename sc in
       let ty = TyApp
-          (pos, TName ("class" ^ sc), [TyVar (pos, c.class_parameter)]) in
-    (pos, LName ("sc_" ^ sc), ty) :: acc) c.class_members c.superclasses in
+          (pos, sc_field, [TyVar (pos, c.class_parameter)]) in
+    (pos, LName ("sc" ^ sc), ty) :: acc) c.class_members c.superclasses in
   let record = TypeDefs (pos,
                          [TypeDef (pos, kind_of_arity 1, record_name,
                                    DRecordType ([c.class_parameter], fields))]) in
   BTypeDefinitions record, type_definitions env record
 
 and create_members env c =
-  List.fold_left (fun acc m -> create_member env m :: acc) [] c.class_members
+  List.fold_left (fun (acc, env) m ->
+      let m, env = create_member env c m in
+      m :: acc, env) ([], env) c.class_members
 
-and create_member env m =
-  assert false
+and create_member env c (pos, lname, ty) =
+  let LName n = lname in
+  let TName cl = c.class_name in
+  let class_pred = ClassPredicate (TName cl, c.class_parameter) in
+  let ty = extend_type_with_predicates pos ty [class_pred] in
+  let rec_access =
+    ERecordAccess (pos, EVar (pos, Name ("dict" ^ cl), []), lname) in
+
+  (* We introduce the class_param to be able to use the dictionnary *)
+  let expr = EForall (pos, [c.class_parameter],
+                      ELambda (pos,
+                               (Name ("dict" ^ cl), class_type pos class_pred),
+                               rec_access)) in
+  let v =
+    BindValue (pos,
+               [ValueDef (pos, [c.class_parameter], [], (Name n, ty), expr)]) in
+  let v, env = value_binding env v in
+  BDefinition v, env
+
+and class_type pos (ClassPredicate (TName cl, param)) =
+  let cl_name = class_typename cl in
+  TyApp (pos, cl_name, [TyVar (pos, param)])
+
+and extend_type_with_predicates pos ty predicates =
+  let types = List.fold_right (fun cp acc ->
+      (* let cl_name = class_typename cl in *)
+      (* let cl_type = TyApp (pos, cl_name, [TyVar (pos, param)]) in *)
+      class_type pos cp :: acc) predicates [] in
+  ntyarrow pos types ty
+
+and class_typename cl =
+  (* let TName n = c.class_name in *)
+  TName ("class" ^ cl)
 
 (* Instances definitions *)
 
