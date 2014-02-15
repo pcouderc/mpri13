@@ -79,3 +79,8 @@ val lookup_class_instances : position -> tname -> t -> instance_definition list
 (** [bind_instance ins env] binds then instance [ins], using its class and
   index. *)
 val bind_instance : instance_definition -> t -> t
+
+
+val lookup_member : position -> tname -> t -> tname
+
+val bind_member : position -> tname -> tname -> t -> t

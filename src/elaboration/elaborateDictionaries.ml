@@ -126,7 +126,17 @@ and type_application pos env x tys =
   with _ ->
     raise (InvalidTypeApplication pos)
 
+and is_overloaded pos env v =
+  try ignore (lookup_member pos v env); true
+  with Not_found -> false
+
+
 and expression env = function
+  | (EVar (pos, ((Name s) as x), tys) as ev) when
+      is_overloaded pos env (TName s) ->
+    let TName cl = lookup_member pos (TName s) env in
+    expression env (EApp(pos, ev, EVar (pos, Name ("dict" ^ cl), tys)))
+
   | EVar (pos, ((Name s) as x), tys) ->
     (EVar (pos, x, tys), type_application pos env x tys)
 
@@ -378,12 +388,14 @@ and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
   if is_value_form e then begin
     let e = eforall pos ts e in
     let e, ty = expression env' e in
+    let e = extend_expr_with_predicates pos ps e in
+    let ty = extend_type_with_predicates pos ty ps in
     let b = (x, ty) in
     check_equal_types pos xty ty;
     (ValueDef (pos, ts, [], b, EForall (pos, ts, e)),
      bind_scheme x ts ty env)
   end else begin
-    if ts <> [] then
+    if ts <> [] || ps <> [] then
       raise (ValueRestriction pos)
     else
       let e = eforall pos [] e in
@@ -394,6 +406,7 @@ and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
   end
 
 and value_declaration env (ValueDef (pos, ts, ps, (x, ty), e)) =
+  let ty = extend_type_with_predicates pos ty ps in
   bind_scheme x ts ty env
 
 
@@ -517,6 +530,9 @@ and create_member env c (pos, lname, ty) =
   let v, env = value_binding env v in
   BDefinition v, env
 
+and extend_expr_with_predicates pos ps expr =
+  List.fold_right (extend_expr_with_predicate pos) ps expr
+
 and extend_expr_with_predicate pos cp expr =
   let (ClassPredicate (TName cl, param)) = cp in
   EForall (pos, [param],
@@ -615,9 +631,7 @@ and instance_elaboration env ins =
   let record = ERecordCon (pos, name, [ty],
                            (extend_record_binding pos env ins ty)) in
   let ty = create_record_type pos env ins in
-  let expr = List.fold_right (fun cl acc ->
-      extend_expr_with_predicate pos cl acc)
-      ins.instance_typing_context record in
+  let expr = extend_expr_with_predicates pos ins.instance_typing_context record in
   let value = ValueDef (pos, ins.instance_parameters, [], (name, ty), expr) in
   value, env
   (* print_endline @@ string_of_type ty *)
