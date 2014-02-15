@@ -549,9 +549,9 @@ and instance_definitions env instances =
     step (v :: acc) env t
   in
   let values, env = step [] env instances in
-  (* let values, env = *)
-  (*   value_binding env (BindRecValue (pos, values)) in *)
-  (* values  *)BindRecValue (pos, values), env
+  let values, env =
+    value_binding env (BindRecValue (pos, values)) in
+  values(* BindRecValue (pos, values) *), env
 
 and instance_definition env instance =
   check_superclasses_instances env instance;
@@ -612,7 +612,7 @@ and instance_elaboration env ins =
   let pos = ins.instance_position in
   let ty = reconstruct_type ins in
   let name = Name (instance_name_raw ins ty) in
-  let record = ERecordCon (pos, name, [],
+  let record = ERecordCon (pos, name, [ty],
                            (extend_record_binding pos env ins ty)) in
   let ty = create_record_type pos env ins in
   let expr = List.fold_right (fun cl acc ->
