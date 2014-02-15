@@ -33,8 +33,8 @@ and block env = function
 
   | BInstanceDefinitions is ->
     (* List.iter (fun ins -> Format.printf "%s;" @@ string_of_instance ins) is; *)
-    let env = instance_definitions env is in
-    ([], env)
+    let d, env = instance_definitions env is in
+    ([BDefinition d], env)
 
 (* Type definitions *)
 
@@ -477,10 +477,6 @@ and check_superclasses_members env sclasses (pos, n, _) =
 (* Class elaboration *)
 
 and elaborate_class env c =
-  (* What we need:
-     - Create a record type for the class
-     - Create a value for each class member
-  *)
   let class_record, env = create_class_record env c in
   let members, env = create_members env c in
   class_record :: members, env
@@ -514,15 +510,19 @@ and create_member env c (pos, lname, ty) =
     ERecordAccess (pos, EVar (pos, Name ("dict" ^ cl), []), lname) in
 
   (* We introduce the class_param to be able to use the dictionnary *)
-  let expr = EForall (pos, [c.class_parameter],
-                      ELambda (pos,
-                               (Name ("dict" ^ cl), class_type pos class_pred),
-                               rec_access)) in
+  let expr = extend_expr_with_predicate pos class_pred rec_access in
   let v =
     BindValue (pos,
                [ValueDef (pos, [c.class_parameter], [], (Name n, ty), expr)]) in
   let v, env = value_binding env v in
   BDefinition v, env
+
+and extend_expr_with_predicate pos cp expr =
+  let (ClassPredicate (TName cl, param)) = cp in
+  EForall (pos, [param],
+           ELambda (pos,
+                    (Name ("dict" ^ cl), class_type pos cp),
+                    expr))
 
 and class_type pos (ClassPredicate (TName cl, param)) =
   let cl_name = class_typename cl in
@@ -530,13 +530,10 @@ and class_type pos (ClassPredicate (TName cl, param)) =
 
 and extend_type_with_predicates pos ty predicates =
   let types = List.fold_right (fun cp acc ->
-      (* let cl_name = class_typename cl in *)
-      (* let cl_type = TyApp (pos, cl_name, [TyVar (pos, param)]) in *)
       class_type pos cp :: acc) predicates [] in
   ntyarrow pos types ty
 
 and class_typename cl =
-  (* let TName n = c.class_name in *)
   TName ("class" ^ cl)
 
 (* Instances definitions *)
@@ -544,16 +541,22 @@ and class_typename cl =
 and instance_definitions env instances =
   let env = List.fold_left (fun env ins ->
       bind_instance ins env) env instances in
-  let rec step env = function
-  | [] -> env
+  let pos = (List.hd instances).instance_position in
+  let rec step acc env = function
+  | [] -> acc, env
   | ins :: t -> let env = instance_definition env ins in
-    step env t
+    let v, env = instance_elaboration env ins in
+    step (v :: acc) env t
   in
-  step env instances
+  let values, env = step [] env instances in
+  (* let values, env = *)
+  (*   value_binding env (BindRecValue (pos, values)) in *)
+  (* values  *)BindRecValue (pos, values), env
 
 and instance_definition env instance =
   check_superclasses_instances env instance;
   check_instance_members env instance;
+  (* instance_elaboration env instance; *)
   env
 
 and check_superclasses_instances env instance =
@@ -603,4 +606,49 @@ and check_reconstructed_type_arity env = function
   | _ -> assert false
 
 
-(* and check *)
+(* Instance elaboration *)
+
+and instance_elaboration env ins =
+  let pos = ins.instance_position in
+  let ty = reconstruct_type ins in
+  let name = Name (instance_name_raw ins ty) in
+  let record = ERecordCon (pos, name, [],
+                           (extend_record_binding pos env ins ty)) in
+  let ty = create_record_type pos env ins in
+  let expr = List.fold_right (fun cl acc ->
+      extend_expr_with_predicate pos cl acc)
+      ins.instance_typing_context record in
+  let value = ValueDef (pos, ins.instance_parameters, [], (name, ty), expr) in
+  value, env
+  (* print_endline @@ string_of_type ty *)
+
+and create_record_type pos env ins =
+  extend_type_with_predicates pos
+    (instance_base_type pos ins)
+    ins.instance_typing_context
+
+and extend_record_binding pos env ins ty =
+  List.fold_left (fun bindings (TName sc) ->
+      let sc_ins = string_of_type ty ^ sc in
+      RecordBinding (LName ("sc" ^ sc),
+                     EVar (pos, Name sc_ins, [])) :: bindings)
+    ins.instance_members (lookup_superclasses pos ins.instance_class_name env)
+
+and instance_base_type pos ins =
+  let TName cl = ins.instance_class_name in
+  let ty = reconstruct_type ins in
+  TyApp (pos, class_typename cl, [ty])
+
+and string_of_type = function
+    | TyVar (_, TName n) ->
+      if String.contains n '\'' then "" else n
+    | TyApp (_, TName n, tl) ->
+      List.fold_left (fun acc t -> string_of_type t ^ acc) n tl
+
+and instance_name ins =
+  let ty = reconstruct_type ins in
+  TName (instance_name_raw ins ty)
+
+and instance_name_raw ins ty =
+  let TName cl = ins.instance_class_name in
+  string_of_type ty ^ cl
