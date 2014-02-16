@@ -127,7 +127,7 @@ and type_application pos env x tys =
     raise (InvalidTypeApplication pos)
 
 and is_overloaded pos env ty =
-  Format.printf "Is_overloaded?: %s@." @@ string_of_type2 ty;
+  (* Format.printf "Is_overloaded?: %s@." @@ string_of_type2 ty; *)
   match ty with
   | TyApp (_, TName n, [ty]) ->
     if String.length n > 5 && String.sub n 0 5 = "class" then Some (n, ty)
@@ -135,14 +135,36 @@ and is_overloaded pos env ty =
   | _ -> None
 
 and class_repr pos env = function
+  (* Abstracted dictionnary *)
   | Some (n, ((TyVar (_,_)) as t)) ->
+    let cl = (String.sub n 5 (String.length n - 5)) in
+    ignore (lookup_class pos (TName cl) env);
     let c = "dict" ^ (String.sub n 5 (String.length n - 5)) in
     EVar (pos, Name c, [t])
-  | Some (n, ((TyApp (_, TName _, _)) as t)) ->
-    let c = repr_of_type t ^ (String.sub n 5 (String.length n - 5)) in
+
+  (* Already instantiated dictionnary *)
+  | Some (n, ((TyApp (_, TName _, [])) as t)) ->
+    let cl = (String.sub n 5 (String.length n - 5)) in
+    ignore (lookup_instance pos (TName cl) (TName (repr_of_type t)) env);
+    let c = repr_of_type t ^ cl in
     EVar (pos, Name c, [t])
+
+  (* Elaborated dictionnaries *)
+  | Some (n, ((TyApp (_, TName _, ts)) as t)) ->
+    let cl = (String.sub n 5 (String.length n - 5)) in
+    ignore (lookup_instance pos (TName cl) (TName (repr_of_type t)) env);
+    let c = repr_of_type t ^ cl in
+    let hd = class_repr pos env (Some (n, List.hd ts)) in
+    let ts = List.tl ts in
+    EApp(pos, EVar (pos, Name c, [t]),
+         List.fold_left (fun acc ty ->
+             let ty = Some (n, ty) in
+             EApp (pos, class_repr pos env ty, acc)) hd ts)
+
+  (* The repr always take the result of is_overloaded in case it is Some _ *)
   | None -> assert false
 
+(* Debug function *)
 and string_of_type2 = function
   | TyVar (_, TName n) -> n
   | TyApp (_, TName n, ts) ->
@@ -152,9 +174,9 @@ and string_of_type2 = function
 and expression env = function
 
   | EVar (pos, ((Name s) as x), tys) ->
-    Format.printf "Evar: %s, ty:@." s;
-    List.iter (fun ty -> Format.printf "%s; " @@ string_of_type ty) tys;
-    Format.printf "@.";
+    (* Format.printf "Evar: %s, ty:@." s; *)
+    (* List.iter (fun ty -> Format.printf "%s; " @@ string_of_type ty) tys; *)
+    (* Format.printf "@."; *)
     (EVar (pos, x, tys), type_application pos env x tys)
 
   | ELambda (pos, ((x, aty) as b), e') ->
@@ -166,8 +188,8 @@ and expression env = function
   | EApp (pos, a, b) ->
     let a, a_ty = expression env a in
     let b, b_ty = expression env b in
-    Format.printf "a_ty: %s\nb_ty: %s@."
-      (string_of_type a_ty) (string_of_type b_ty);
+    (* Format.printf "a_ty: %s\nb_ty: %s@." *)
+    (*   (string_of_type a_ty) (string_of_type b_ty); *)
     begin match destruct_tyarrow a_ty with
       | None ->
         raise (ApplicationToNonFunctional pos)
@@ -176,7 +198,7 @@ and expression env = function
         begin
           match is_overloaded pos env ity with
           | Some (cl, ty) ->
-            Format.printf "Is_overloaded @.";
+            (* Format.printf "Is_overloaded @."; *)
             let c = class_repr pos env (Some (cl, ty)) in
             let ity, oty = match destruct_tyarrow oty with
                 Some (ity, oty) -> ity, oty
@@ -428,7 +450,7 @@ and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
     (* We extend xty with the introduced dictionary arguments *)
     let xty = extend_type_with_predicates pos xty ps in
     let b = (x, ty) in
-    Format.printf "here ?@.";
+    (* Format.printf "here ?@."; *)
     check_equal_types pos xty ty;
     (ValueDef (pos, ts, [], b, EForall (pos, ts, e)),
      bind_scheme x ts ty env)
