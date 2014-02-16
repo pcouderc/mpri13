@@ -126,18 +126,35 @@ and type_application pos env x tys =
   with _ ->
     raise (InvalidTypeApplication pos)
 
-and is_overloaded pos env v =
-  try ignore (lookup_member pos v env); true
-  with Not_found -> false
+and is_overloaded pos env ty =
+  Format.printf "Is_overloaded?: %s@." @@ string_of_type2 ty;
+  match ty with
+  | TyApp (_, TName n, [ty]) ->
+    if String.length n > 5 && String.sub n 0 5 = "class" then Some (n, ty)
+    else None
+  | _ -> None
 
+and class_repr pos env = function
+  | Some (n, ((TyVar (_,_)) as t)) ->
+    let c = "dict" ^ (String.sub n 5 (String.length n - 5)) in
+    EVar (pos, Name c, [t])
+  | Some (n, ((TyApp (_, TName _, _)) as t)) ->
+    let c = repr_of_type t ^ (String.sub n 5 (String.length n - 5)) in
+    EVar (pos, Name c, [t])
+  | None -> assert false
+
+and string_of_type2 = function
+  | TyVar (_, TName n) -> n
+  | TyApp (_, TName n, ts) ->
+    Format.sprintf "%s(%s)" n
+      (List.fold_left (fun acc t -> acc ^ ", " ^ (string_of_type2 t)) "" ts)
 
 and expression env = function
-  | (EVar (pos, ((Name s) as x), tys) as ev) when
-      is_overloaded pos env (TName s) ->
-    let TName cl = lookup_member pos (TName s) env in
-    expression env (EApp(pos, ev, EVar (pos, Name ("dict" ^ cl), tys)))
 
   | EVar (pos, ((Name s) as x), tys) ->
+    Format.printf "Evar: %s, ty:@." s;
+    List.iter (fun ty -> Format.printf "%s; " @@ string_of_type ty) tys;
+    Format.printf "@.";
     (EVar (pos, x, tys), type_application pos env x tys)
 
   | ELambda (pos, ((x, aty) as b), e') ->
@@ -149,12 +166,27 @@ and expression env = function
   | EApp (pos, a, b) ->
     let a, a_ty = expression env a in
     let b, b_ty = expression env b in
+    Format.printf "a_ty: %s\nb_ty: %s@."
+      (string_of_type a_ty) (string_of_type b_ty);
     begin match destruct_tyarrow a_ty with
       | None ->
         raise (ApplicationToNonFunctional pos)
       | Some (ity, oty) ->
-        check_equal_types pos b_ty ity;
-        (EApp (pos, a, b), oty)
+        (* Rule OApp *)
+        begin
+          match is_overloaded pos env ity with
+          | Some (cl, ty) ->
+            Format.printf "Is_overloaded @.";
+            let c = class_repr pos env (Some (cl, ty)) in
+            let ity, oty = match destruct_tyarrow oty with
+                Some (ity, oty) -> ity, oty
+              | None -> assert false in
+            check_equal_types pos b_ty ity;
+            (EApp (pos, EApp (pos, a, c), b), oty)
+          | None ->
+            check_equal_types pos b_ty ity;
+            (EApp (pos, a, b), oty)
+        end
     end
 
   | EBinding (pos, vb, e) ->
@@ -383,14 +415,20 @@ and eforall pos ts e =
 
 and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
   let env' = introduce_type_parameters env ts in
+  (* let env' = List.fold_left = *)
   check_wf_scheme env ts xty;
 
   if is_value_form e then begin
     let e = eforall pos ts e in
+
+    (* Rule OAbs *)
+    let e = List.fold_right (extend_expr_with_predicate' pos) ps e in
     let e, ty = expression env' e in
-    let e = extend_expr_with_predicates pos ps e in
-    let ty = extend_type_with_predicates pos ty ps in
+
+    (* We extend xty with the introduced dictionary arguments *)
+    let xty = extend_type_with_predicates pos xty ps in
     let b = (x, ty) in
+    Format.printf "here ?@.";
     check_equal_types pos xty ty;
     (ValueDef (pos, ts, [], b, EForall (pos, ts, e)),
      bind_scheme x ts ty env)
@@ -445,6 +483,8 @@ and class_definition env c =
   check_superclasses env c;
   check_members env sclasses c.class_parameter c.class_members;
   let env = bind_class c.class_name c env in
+  let env = List.fold_left (fun env (pos, LName n, _) ->
+      bind_member pos (TName n) c.class_name env) env c.class_members in
   elaborate_class env c
 
 and check_superclasses env c =
@@ -535,10 +575,13 @@ and extend_expr_with_predicates pos ps expr =
 
 and extend_expr_with_predicate pos cp expr =
   let (ClassPredicate (TName cl, param)) = cp in
-  EForall (pos, [param],
-           ELambda (pos,
-                    (Name ("dict" ^ cl), class_type pos cp),
-                    expr))
+  EForall (pos, [param], extend_expr_with_predicate' pos cp expr)
+
+and extend_expr_with_predicate' pos cp expr =
+  let (ClassPredicate (TName cl, param)) = cp in
+  ELambda (pos,
+           (Name ("dict" ^ cl), class_type pos cp),
+           expr)
 
 and class_type pos (ClassPredicate (TName cl, param)) =
   let cl_name = class_typename cl in
@@ -643,7 +686,7 @@ and create_record_type pos env ins =
 
 and extend_record_binding pos env ins ty =
   List.fold_left (fun bindings (TName sc) ->
-      let sc_ins = string_of_type ty ^ sc in
+      let sc_ins = repr_of_type ty ^ sc in
       RecordBinding (LName ("sc" ^ sc),
                      EVar (pos, Name sc_ins, [])) :: bindings)
     ins.instance_members (lookup_superclasses pos ins.instance_class_name env)
@@ -653,11 +696,11 @@ and instance_base_type pos ins =
   let ty = reconstruct_type ins in
   TyApp (pos, class_typename cl, [ty])
 
-and string_of_type = function
+and repr_of_type = function
     | TyVar (_, TName n) ->
       if String.contains n '\'' then "" else n
     | TyApp (_, TName n, tl) ->
-      List.fold_left (fun acc t -> string_of_type t ^ acc) n tl
+      List.fold_left (fun acc t -> repr_of_type t ^ acc) n tl
 
 and instance_name ins =
   let ty = reconstruct_type ins in
@@ -665,4 +708,4 @@ and instance_name ins =
 
 and instance_name_raw ins ty =
   let TName cl = ins.instance_class_name in
-  string_of_type ty ^ cl
+  repr_of_type ty ^ cl
