@@ -134,7 +134,7 @@ and is_overloaded pos env ty =
     else None
   | _ -> None
 
-and class_repr pos env = function
+and class_repr pos env ps = function
   (* Abstracted dictionnary *)
   | Some (n, ((TyVar (_,_)) as t)) ->
     let cl = (String.sub n 5 (String.length n - 5)) in
@@ -154,12 +154,12 @@ and class_repr pos env = function
     let cl = (String.sub n 5 (String.length n - 5)) in
     ignore (lookup_instance pos (TName cl) (TName (repr_of_type t)) env);
     let c = repr_of_type t ^ cl in
-    let hd = class_repr pos env (Some (n, List.hd ts)) in
+    let hd = class_repr pos env ps (Some (n, List.hd ts)) in
     let ts = List.tl ts in
     EApp(pos, EVar (pos, Name c, [t]),
          List.fold_left (fun acc ty ->
              let ty = Some (n, ty) in
-             EApp (pos, class_repr pos env ty, acc)) hd ts)
+             EApp (pos, class_repr pos env ps ty, acc)) hd ts)
 
   (* The repr always take the result of is_overloaded in case it is Some _ *)
   | None -> assert false
@@ -171,23 +171,20 @@ and string_of_type2 = function
     Format.sprintf "%s(%s)" n
       (List.fold_left (fun acc t -> acc ^ ", " ^ (string_of_type2 t)) "" ts)
 
-and expression env = function
+and expression env (ps : class_predicates) = function
 
   | EVar (pos, ((Name s) as x), tys) ->
-    (* Format.printf "Evar: %s, ty:@." s; *)
-    (* List.iter (fun ty -> Format.printf "%s; " @@ string_of_type ty) tys; *)
-    (* Format.printf "@."; *)
     (EVar (pos, x, tys), type_application pos env x tys)
 
   | ELambda (pos, ((x, aty) as b), e') ->
     check_wf_type env KStar aty;
     let env = bind_simple x aty env in
-    let (e, ty) = expression env e' in
+    let (e, ty) = expression env ps e' in
     (ELambda (pos, b, e), ntyarrow pos [aty] ty)
 
   | EApp (pos, a, b) ->
-    let a, a_ty = expression env a in
-    let b, b_ty = expression env b in
+    let a, a_ty = expression env ps a in
+    let b, b_ty = expression env ps b in
     (* Format.printf "a_ty: %s\nb_ty: %s@." *)
     (*   (string_of_type a_ty) (string_of_type b_ty); *)
     begin match destruct_tyarrow a_ty with
@@ -199,7 +196,7 @@ and expression env = function
           match is_overloaded pos env ity with
           | Some (cl, ty) ->
             (* Format.printf "Is_overloaded @."; *)
-            let c = class_repr pos env (Some (cl, ty)) in
+            let c = class_repr pos env ps (Some (cl, ty)) in
             let ity, oty = match destruct_tyarrow oty with
                 Some (ity, oty) -> ity, oty
               | None -> assert false in
@@ -213,7 +210,7 @@ and expression env = function
 
   | EBinding (pos, vb, e) ->
     let vb, env = value_binding env vb in
-    let e, ty = expression env e in
+    let e, ty = expression env ps e in
     (EBinding (pos, vb, e), ty)
 
   | EForall (pos, tvs, e) ->
@@ -221,14 +218,14 @@ and expression env = function
     raise (OnlyLetsCanIntroduceTypeAbstraction pos)
 
   | ETypeConstraint (pos, e, xty) ->
-    let e, ty = expression env e in
+    let e, ty = expression env ps e in
     check_equal_types pos ty xty;
     (e, ty)
 
   | EExists (_, _, e) ->
     (** Because we are explicitly typed, flexible type variables
         are useless. *)
-    expression env e
+    expression env ps e
 
   | EDCon (pos, DName x, tys, es) ->
     let ty = type_application pos env (Name x) tys in
@@ -238,7 +235,7 @@ and expression env = function
     else
       let es =
         List.map2 (fun e xty ->
-          let (e, ty) = expression env e in
+          let (e, ty) = expression env ps e in
           check_equal_types pos ty xty;
           e
         ) es itys
@@ -246,8 +243,8 @@ and expression env = function
       (EDCon (pos, DName x, tys, es), oty)
 
   | EMatch (pos, s, bs) ->
-    let (s, sty) = expression env s in
-    let bstys = List.map (branch env sty) bs in
+    let (s, sty) = expression env ps s in
+    let bstys = List.map (branch env ps sty) bs in
     let bs = fst (List.split bstys) in
     let tys = snd (List.split bstys) in
     let ty = List.hd tys in
@@ -255,7 +252,7 @@ and expression env = function
     (EMatch (pos, s, bs), ty)
 
   | ERecordAccess (pos, e, l) ->
-    let e, ty = expression env e in
+    let e, ty = expression env ps e in
     let (ts, lty, rtcon) = lookup_label pos l env in
     let ty =
       match ty with
@@ -281,7 +278,7 @@ and expression env = function
     assert false
 
   | ERecordCon (pos, n, i, rbs) ->
-    let rbstys = List.map (record_binding env) rbs in
+    let rbstys = List.map (record_binding env ps) rbs in
     let rec check others rty = function
       | [] ->
         List.rev others, rty
@@ -326,10 +323,10 @@ and primitive pos = function
   | PCharConstant _ ->
     TyApp (pos, TName "char", [])
 
-and branch env sty (Branch (pos, p, e)) =
+and branch env ps sty (Branch (pos, p, e)) =
   let denv = pattern env sty p in
   let env = concat pos env denv in
-  let (e, ty) = expression env e in
+  let (e, ty) = expression env ps e in
   (Branch (pos, p, e), ty)
 
 and concat pos env1 env2 =
@@ -399,8 +396,8 @@ and pattern env xty = function
     List.(iter (check_same_denv pos denv) (tl denvs));
     denv
 
-and record_binding env (RecordBinding (l, e)) =
-  let e, ty = expression env e in
+and record_binding env ps (RecordBinding (l, e)) =
+  let e, ty = expression env ps e in
   (RecordBinding (l, e), ty)
 
 and value_binding env = function
@@ -445,7 +442,7 @@ and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
 
     (* Rule OAbs *)
     let e = List.fold_right (extend_expr_with_predicate' pos) ps e in
-    let e, ty = expression env' e in
+    let e, ty = expression env' ps e in
 
     (* We extend xty with the introduced dictionary arguments *)
     let xty = extend_type_with_predicates pos xty ps in
@@ -459,7 +456,7 @@ and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
       raise (ValueRestriction pos)
     else
       let e = eforall pos [] e in
-      let e, ty = expression env' e in
+      let e, ty = expression env' ps e in
       let b = (x, ty) in
       check_equal_types pos xty ty;
       (ValueDef (pos, [], [], b, e), bind_simple x ty env)
@@ -655,7 +652,7 @@ and check_instance_members env ins =
   let class_members = class_.class_members in
   let xenv = extended_env env ins class_ in
   List.iter2 (fun (pos, lname, mltype) (RecordBinding (LName n, expr)) ->
-      let _, ty = expression xenv expr in
+      let _, ty = expression xenv ins.instance_typing_context expr in
       let r_type = reconstruct_type ins in
       check_reconstructed_type_arity xenv r_type;
       let mltype = substitute [class_.class_parameter, r_type] mltype in
