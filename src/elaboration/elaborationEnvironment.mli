@@ -80,7 +80,8 @@ val lookup_class_instances : position -> tname -> t -> instance_definition list
   index. *)
 val bind_instance : instance_definition -> t -> t
 
-
-val lookup_member : position -> tname -> t -> tname
+val lookup_member : position -> tname -> t -> tname list
 
 val bind_member : position -> tname -> tname -> t -> t
+
+val bind_class_to_member : position -> tname -> tname -> t -> t
