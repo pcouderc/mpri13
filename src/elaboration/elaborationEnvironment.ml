@@ -10,13 +10,15 @@ type t = {
   classes      : (tname * class_definition) list;
   labels       : (lname * (tnames * Types.t * tname)) list;
   instances    : ((tname * tname) * instance_definition) list;
+  members      : (tname * tname) list
 }
 
 let empty = { values = [];
               types = [];
               classes = [];
               labels = [];
-              instances = []
+              instances = [];
+              members = []
             }
 
 let values env = env.values
@@ -118,7 +120,18 @@ let bind_instance ins env =
     ignore (lookup_instance pos classname index env);
     raise (AlreadyDefinedInstance (pos, classname, index))
   with
-  | UnboundInstance _ -> { env with instances = ((classname, index), ins) :: env.instances }
+  | UnboundInstance _ -> { env with instances = ((classname, index), ins) ::
+  env.instances }
+
+let lookup_member pos tname env =
+    List.assoc tname env.members
+
+let bind_member pos ((TName n) as tname) ty env =
+  try
+    ignore (lookup_member pos tname env);
+    raise (OverloadedSymbolCannotBeBound (pos, Name n))
+  with Not_found ->
+    { env with members = (tname, ty) :: env.members }
 
 let initial =
   let primitive_type t k = TypeDef (undefined_position, k, t, DAlgebraic []) in
