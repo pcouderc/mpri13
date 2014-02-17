@@ -102,14 +102,12 @@ and check_equivalent_kind pos k1 k2 =
     | _ ->
       raise (IncompatibleKinds (pos, k1, k2))
 
-(** To be modified to typecheck with classes predicates ! *)
 and env_of_bindings env cdefs = List.(
   (function
     | BindValue (_, vs)
     | BindRecValue (_, vs) ->
-      fold_left (fun env (ValueDef (_, ts, c, (x, ty), _)) ->
-          let env = assert false in
-          bind_scheme x ts ty env
+      fold_left (fun env (ValueDef (_, ts, _, (x, ty), _)) ->
+        bind_scheme x ts ty env
       ) env vs
     | ExternalValue (_, ts, (x, ty), _) ->
       bind_scheme x ts ty env
@@ -538,17 +536,10 @@ and check_class_param pos env cl_name param =
 
 and check_members env sclasses param = function
   | [] -> ()
-  | (pos, n, ty) :: l ->
+  | (pos, n, ty) as func :: l ->
     check_wf_scheme env [param] ty;
-    check_already_defined_member env pos n;
-    (* check_superclasses_members env sclasses func; *)
+    check_superclasses_members env sclasses func;
     check_members env sclasses param l
-
-and check_already_defined_member env pos (LName n) =
-  try
-    ignore (lookup pos (Name n) env);
-    raise (AlreadyDefinedMember (pos, LName n))
-  with UnboundIdentifier _ -> ()
 
 and check_superclasses_members env sclasses (pos, n, _) =
   let already_defined sclass =
@@ -644,11 +635,13 @@ and instance_definitions env instances =
   values(* BindRecValue (pos, values) *), env
 
 and instance_definition env instance =
-  check_superclasses_instances instance.instance_position env instance;
-  check_instance_members instance.instance_position env instance;
+  check_superclasses_instances env instance;
+  check_instance_members env instance;
+  (* instance_elaboration env instance; *)
   env
 
-and check_superclasses_instances pos env instance =
+and check_superclasses_instances env instance =
+  let pos = instance.instance_position in
   let sclasses = lookup_superclasses pos instance.instance_class_name env in
   let index = instance.instance_index in
   List.iter (fun cl ->
@@ -656,13 +649,14 @@ and check_superclasses_instances pos env instance =
       with e -> raise e) sclasses
 
 
-and check_instance_members pos env ins =
+and check_instance_members env ins =
+  let pos = ins.instance_position in
   let class_ = lookup_class pos ins.instance_class_name env in
   let class_members = class_.class_members in
   let xenv = extended_env env ins class_ in
   List.iter2 (fun (pos, lname, mltype) (RecordBinding (LName n, expr)) ->
       let _, ty = expression xenv expr in
-      let r_type = reconstruct_type pos ins in
+      let r_type = reconstruct_type ins in
       check_reconstructed_type_arity xenv r_type;
       let mltype = substitute [class_.class_parameter, r_type] mltype in
       if not @@ equivalent mltype ty then
@@ -679,7 +673,8 @@ and extended_env env ins class_ =
        bind_scheme (Name name) [class_.class_parameter] mltype env) env class_members
 
 
-and reconstruct_type pos ins =
+and reconstruct_type ins =
+  let pos = ins.instance_position in
   let type_parameters =
     List.map (fun tname -> TyVar (pos, tname)) ins.instance_parameters in
   TyApp (ins.instance_position, ins.instance_index, type_parameters)
@@ -696,7 +691,7 @@ and check_reconstructed_type_arity env = function
 
 and instance_elaboration env ins =
   let pos = ins.instance_position in
-  let ty = reconstruct_type pos ins in
+  let ty = reconstruct_type ins in
   let name = Name (instance_name_raw ins ty) in
   let record = ERecordCon (pos, name, [ty],
                            (extend_record_binding pos env ins ty)) in
@@ -720,7 +715,7 @@ and extend_record_binding pos env ins ty =
 
 and instance_base_type pos ins =
   let TName cl = ins.instance_class_name in
-  let ty = reconstruct_type pos ins in
+  let ty = reconstruct_type ins in
   TyApp (pos, class_typename cl, [ty])
 
 and repr_of_type = function
@@ -730,7 +725,7 @@ and repr_of_type = function
       List.fold_left (fun acc t -> repr_of_type t ^ acc) n tl
 
 and instance_name ins =
-  let ty = reconstruct_type ins.instance_position ins in
+  let ty = reconstruct_type ins in
   TName (instance_name_raw ins ty)
 
 and instance_name_raw ins ty =
