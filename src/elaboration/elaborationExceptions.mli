@@ -129,3 +129,7 @@ exception UnboundInstance of position * tname * tname
 (** [AlreadyDefinedInstance] is raised when a instance of a class for a specific
   type has already defined *)
 exception AlreadyDefinedInstance of position * tname * tname
+
+(** [AlreadyDefinedMember] is raised when a class tries to define an overloaded
+  function with the same name as an other function *)
+exception AlreadyDefinedMember of position * lname

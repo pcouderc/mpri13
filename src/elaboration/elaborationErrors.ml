@@ -144,3 +144,8 @@ let handle_error f =
       fatal' pos (Printf.sprintf
                     "  The class %s has no instance defined for the type %s."
                     cname index)
+    | AlreadyDefinedMember (pos, LName n) ->
+      fatal' pos (Printf.sprintf
+                    "  The member %s cannot be used as an overloaded function
+      since a value with the same name already exists."
+                    n)
