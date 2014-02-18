@@ -59,6 +59,8 @@ val is_superclass : position -> tname -> tname -> t -> bool
 (** [bind_class c cdef e] associates a class_definition [cdef] to [c] in [e]. *)
 val bind_class : tname -> class_definition -> t -> t
 
+val find_path : position -> tname -> tname -> t -> tname list option
+
 (** [bind_label pos l ts lty rtycon e] associates the type parameters [ts],
     the type [lty] and the record type constructor [rtycon] to the label [l]
     in [e]. *)

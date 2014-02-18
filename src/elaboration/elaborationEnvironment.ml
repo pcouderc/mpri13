@@ -4,10 +4,13 @@ open XAST
 open Types
 open ElaborationExceptions
 
+
+type class_tree = Class of tname * class_tree list
+
 type t = {
   values       : (tnames * binding) list;
   types        : (tname * (Types.kind * type_definition)) list;
-  classes      : (tname * class_definition) list;
+  classes      : (tname * (class_definition * class_tree)) list;
   labels       : (lname * (tnames * Types.t * tname)) list;
   instances    : ((tname * tname) * instance_definition) list;
   members      : (tname * tname list) list
@@ -51,22 +54,47 @@ let lookup_type_definition pos t env =
 
 let lookup_class pos k env =
   try
-    List.assoc k env.classes
+    fst @@ List.assoc k env.classes
   with Not_found -> raise (UnboundClass (pos, k))
 
-let bind_class k c env =
+let lookup_class_tree pos k env =
   try
-    let pos = c.class_position in
+    snd @@ List.assoc k env.classes
+  with Not_found -> raise (UnboundClass (pos, k))
+
+let generate_class_tree pos k env =
+  let sclasses =
+    List.map (fun c -> lookup_class_tree pos c env) k.superclasses in
+  Class (k.class_name, sclasses)
+
+let bind_class k c env =
+  let pos = c.class_position in
+  let ct = generate_class_tree pos c env in
+  try
     ignore (lookup_class pos k env);
     raise (AlreadyDefinedClass (pos, k))
   with UnboundClass _ ->
-    { env with classes = (k, c) :: env.classes }
+    { env with classes = (k, (c, ct)) :: env.classes }
 
 let lookup_superclasses pos k env =
   (lookup_class pos k env).superclasses
 
 let lookup_classes_definition pos lnames env =
   List.map (fun k -> lookup_class pos k env) lnames
+
+let find_path pos k1 k2 env =
+  let rec find acc t =
+    match acc with
+    | None -> None
+    | Some acc ->
+      match t with
+      | Class (k, []) -> if k = k2 then Some (k :: acc) else None
+      | Class (k, l) -> if k = k2 then Some (k :: acc) else
+          List.fold_left find (Some acc) l
+  in
+  let ct = lookup_class_tree pos k1 env in
+  find (Some []) ct
+
 
 (** ! Modified ! *)
 let is_superclass pos k1 k2 env =
@@ -78,6 +106,13 @@ let is_superclass pos k1 k2 env =
       Format.printf "@."
     end;
   List.mem k2 sclasses
+
+(* let rec find_superclass_path pos k1 k2 env = *)
+(*   let sclasses = lookup_superclasses pos k1 env in *)
+(*   let path = List.fold_left (fun acc k -> *)
+(*       if k = k2 then Some (k1 :: acc) else find_superclass_patch sclasses in *)
+(*   match path with *)
+(*   | [] *)
 
 let bind_type_variable t env =
   bind_type t KStar (TypeDef (undefined_position, KStar, t, DAlgebraic [])) env
