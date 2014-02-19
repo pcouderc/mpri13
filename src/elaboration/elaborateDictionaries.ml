@@ -10,7 +10,7 @@ open ElaborationEnvironment
 
 exception Found
 
-let string_of_type ty      = ASTio.(XAST.(to_string pprint_ml_type ty))
+let string_of_type ty = ASTio.(XAST.(to_string pprint_ml_type ty))
 let string_of_expr e = ASTio.(XAST.(to_string pprint_expression e))
 
 let string_of_instance ins =
@@ -35,7 +35,6 @@ and block env = function
     (defs, env)
 
   | BInstanceDefinitions is ->
-    (* List.iter (fun ins -> Format.printf "%s;" @@ string_of_instance ins) is; *)
     let d, env = instance_definitions env is in
     ([BDefinition d], env)
 
@@ -131,7 +130,6 @@ and type_application pos env x tys =
     raise (InvalidTypeApplication pos)
 
 and is_overloaded pos env ty =
-  (* Format.printf "Is_overloaded?: %s@." @@ string_of_type2 ty; *)
   match ty with
   | TyApp (_, TName n, [ty]) ->
     if String.length n > 5 && String.sub n 0 5 = "class" then Some (n, ty)
@@ -139,21 +137,18 @@ and is_overloaded pos env ty =
   | _ -> None
 
 and class_repr pos env ps = function
-  (* Abstracted dictionnary *)
   | Some (n, TyVar (_,_)) ->
     let cl = (String.sub n 5 (String.length n - 5)) in
-    (* List.iter (fun (TName c, _) -> print_endline c) env.classes; *)
     ignore (lookup_class pos (TName cl) env);
     generate_superclass_access pos env ps (TName cl)
 
-  (* Already instantiated dictionnary *)
-  | Some (n, ((TyApp (_, TName _, [])) as t)) ->
+  | Some (n, ((TyApp (_, TName _, [])) as t))
+  | Some (n, ((TyApp (_, TName _, _)) as t)) when ps = [] -> (* Really ? *)
     let cl = (String.sub n 5 (String.length n - 5)) in
     ignore (lookup_instance pos (TName cl) (TName (repr_of_type t)) env);
     let c = repr_of_type t ^ cl in
     EVar (pos, Name c, [t])
 
-  (* Elaborated dictionnaries *)
   | Some (n, ((TyApp (_, TName _, ts)) as t)) ->
     let cl = (String.sub n 5 (String.length n - 5)) in
     ignore (lookup_instance pos (TName cl) (TName (repr_of_type t)) env);
@@ -207,7 +202,6 @@ and expression env (ps : class_predicates) = function
       | Some (ity, oty) ->
         check_equal_types pos b_ty ity;
         (EApp (pos, a, b), oty)
-        (* end *)
     end
 
   | EBinding (pos, vb, e) ->
