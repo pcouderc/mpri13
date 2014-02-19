@@ -201,9 +201,6 @@ and expression env (ps : class_predicates) = function
   | EApp (pos, a, b) ->
     let a, a_ty = expression env ps a in
     let b, b_ty = expression env ps b in
-    (* Format.printf "a: %s\nb: %s@." (string_of_expr a) (string_of_expr b); *)
-    (* Format.printf "a_ty: %s\nb_ty: %s@." *)
-    (*   (string_of_type a_ty) (string_of_type b_ty); *)
     begin match destruct_tyarrow a_ty with
       | None ->
         raise (ApplicationToNonFunctional pos)
@@ -440,7 +437,21 @@ and eforall pos ts e =
 and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
   let env' = introduce_type_parameters env ts in
   check_wf_scheme env ts xty;
+  let Name n = x in
+  check_value_name pos env n;
   is_canonical pos env ps;
+  (* Let restriction, with values that cannot use a typing context *)
+  begin
+    match is_overloaded pos env xty with
+    | Some _ -> () (* Since we transform instance into dictionnaries, it is
+                     transformed into a value with a typing context, which is
+                     transformed then by expression. This shouldn't raise an
+                     exception and is correct. *)
+    | None ->
+      (match destruct_tyarrow xty with
+      | None -> if ps <> [] then raise (InvalidOverloading pos)
+      | Some _ -> ())
+  end;
 
   if is_value_form e then begin
     let e = eforall pos ts e in
@@ -488,6 +499,11 @@ and is_value_form = function
   | _ ->
     false
 
+and check_value_name pos env name =
+  try
+    ignore (lookup_member pos (TName name) env);
+    raise (InvalidOverloading pos)
+  with Not_found -> ()
 
 (* Class definition *)
 
@@ -499,9 +515,10 @@ and class_definition env c =
   check_superclasses env c;
   check_members env sclasses c.class_parameter c.class_members;
   let env = bind_class c.class_name c env in
+  let def, env = elaborate_class env c in
   let env = List.fold_left (fun env (pos, LName n, _) ->
       bind_member pos (TName n) c.class_name env) env c.class_members in
-  elaborate_class env c
+  def, env
 
 and check_superclasses env c =
   let pos = c.class_position in
@@ -528,9 +545,13 @@ and check_class_param pos env cl_name param =
 
 and check_members env sclasses param = function
   | [] -> ()
-  | (pos, n, ty) as func :: l ->
+  | (pos, (LName n), ty) as func :: l ->
     check_wf_scheme env [param] ty;
     check_superclasses_members env sclasses func;
+    try
+      ignore (lookup pos (Name n) env);
+      raise (InvalidOverloading pos)
+    with UnboundIdentifier (_, _) -> ();
     check_members env sclasses param l
 
 and check_superclasses_members env sclasses (pos, n, _) =
@@ -641,12 +662,12 @@ and check_superclasses_instances env instance =
 
 (* Checks there aren't two equal instance predicates that binds the same type *)
 and is_canonical pos env cps =
-  let rec step acc = function
-    | [] -> acc
+  let rec step = function
+    | [] -> ()
     | cp :: tl ->
-      if List.mem cp tl then print_endline "Not canonical";raise (InvalidOverloading pos)
+      if List.mem cp tl then raise (InvalidOverloading pos) else step tl
   in
-  step () cps
+  step cps
 
 and check_instance_members env ins =
   let pos = ins.instance_position in
