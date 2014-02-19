@@ -98,14 +98,9 @@ let find_path pos k1 k2 env =
 
 (** ! Modified ! *)
 let is_superclass pos k1 k2 env =
-  let sclasses = lookup_superclasses pos k1 env in
-  if !Misc.debug then
-    begin
-      Format.printf "function is_superclass@.";
-      List.iter (function TName name -> Format.printf "%s; " name) sclasses;
-      Format.printf "@."
-    end;
-  List.mem k2 sclasses
+  match find_path pos k1 k2 env with
+  | None -> false
+  | Some _ -> true
 
 (* let rec find_superclass_path pos k1 k2 env = *)
 (*   let sclasses = lookup_superclasses pos k1 env in *)

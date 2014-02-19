@@ -139,7 +139,7 @@ module Make (GAST : AST.GenericS) = struct
       parens_if (match e with
         | EVar _ -> false
         | _ -> true
-      ) (expression e) ^^ !^ ("." ^ l)
+      ) lparen ^^ (expression e) ^^ !^ ("." ^ l ^ ")")
 
     | ERecordCon (_, _, i, rbs) ->
       if produce_ocaml && rbs = [] then

@@ -188,7 +188,6 @@ and expression env (ps : class_predicates) = function
         | None -> (EVar (pos, x, tys), tys')
         | Some (cl, ty) ->
           let c = class_repr pos env ps (Some (cl, ty)) in
-          Format.printf "%s@." @@ string_of_expr c;
           (EApp (pos, (EVar (pos, x, tys)), c), oty)
         end
     end
@@ -306,7 +305,6 @@ and expression env (ps : class_predicates) = function
             | Some (s, rty) ->
               (s, rty)
         in
-        Format.printf "So here ?@.";
         check_equal_types pos ty (Types.substitute s lty);
         check (RecordBinding (l, e) :: others) (Some (s, rty)) ls
     in
@@ -442,6 +440,7 @@ and eforall pos ts e =
 and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
   let env' = introduce_type_parameters env ts in
   check_wf_scheme env ts xty;
+  is_canonical pos env ps;
 
   if is_value_form e then begin
     let e = eforall pos ts e in
@@ -449,8 +448,6 @@ and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
     (* Rule OAbs *)
     let e = List.fold_right (extend_expr_with_predicate' pos) ps e in
     let e, ty = expression env' ps e in
-    (* Format.printf "Expression: %s@.  -> with type %s@." (string_of_expr e) *)
-    (* (string_of_type ty); *)
 
     (* We extend xty with the introduced dictionary arguments *)
     let xty = extend_type_with_predicates pos xty ps in
@@ -464,8 +461,6 @@ and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
     else
       let e = eforall pos [] e in
       let e, ty = expression env' ps e in
-      Format.printf "Expression: %s@.  -> with type %s@." (string_of_expr e)
-        (string_of_type ty);
       let b = (x, ty) in
       check_equal_types pos xty ty;
       (ValueDef (pos, [], [], b, e), bind_simple x ty env)
@@ -473,6 +468,7 @@ and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
 
 and value_declaration env (ValueDef (pos, ts, ps, (x, ty), e)) =
   let ty = extend_type_with_predicates pos ty ps in
+  is_canonical pos env ps;
   bind_scheme x ts ty env
 
 
@@ -492,10 +488,6 @@ and is_value_form = function
   | _ ->
     false
 
-(* Added for expression typing *)
-
-(* and extend_value_def env (ValueDef (pos, ts, ps, b, e)) = *)
-(*   List.fold_right  *)
 
 (* Class definition *)
 
@@ -523,9 +515,7 @@ and check_superclasses env c =
   iter c.superclasses
 
 and unrelated_classes pos env classes c =
-  let TName n1 = c in
   List.iter (fun ((TName n2) as tname) ->
-      if !debug then Format.printf "Testing %s with %s@." n1 n2;
       if is_superclass pos tname c env || c = tname then
         raise (RelatedClasses (pos, c, tname))
     )
@@ -632,15 +622,13 @@ and instance_definitions env instances =
     step (v :: acc) env t
   in
   let values, env = step [] env instances in
-  (* Format.printf "Here ?@."; *)
   value_binding env (BindRecValue (pos, values))
-  (* Format.printf "Nope@."; *)
-  (* BindRecValue (pos, values), env *)
+
 
 and instance_definition env instance =
   check_superclasses_instances env instance;
   check_instance_members env instance;
-  (* instance_elaboration env instance; *)
+  is_canonical instance.instance_position env instance.instance_typing_context;
   env
 
 and check_superclasses_instances env instance =
@@ -651,6 +639,14 @@ and check_superclasses_instances env instance =
       try ignore (lookup_instance pos cl index env)
       with e -> raise e) sclasses
 
+(* Checks there aren't two equal instance predicates that binds the same type *)
+and is_canonical pos env cps =
+  let rec step acc = function
+    | [] -> acc
+    | cp :: tl ->
+      if List.mem cp tl then print_endline "Not canonical";raise (InvalidOverloading pos)
+  in
+  step () cps
 
 and check_instance_members env ins =
   let pos = ins.instance_position in
@@ -715,14 +711,7 @@ and extend_record_binding pos env ins ty =
 
   List.fold_left (fun bindings (TName sc) ->
       let sc_ins = repr_of_type ty ^ sc in
-      let expr = (* if instantiation <> [] then *)
-        (*   let access = generate_superclass_access pos env *)
-        (*       ins.instance_typing_context (TName sc) in *)
-        (*   EApp (pos, EVar (pos, Name sc_ins, instantiation), access) *)
-        (* else *)
-          EVar (pos, Name sc_ins, instantiation)
-      in
-      Format.printf "expr: %s@." @@ string_of_expr expr;
+      let expr = EVar (pos, Name sc_ins, instantiation) in
       RecordBinding (LName ("sc" ^ sc), expr) :: bindings)
     ins.instance_members (lookup_superclasses pos ins.instance_class_name env)
 
@@ -736,13 +725,13 @@ and generate_superclass_access pos env ps (TName n) =
         | None -> None
         | Some l -> Some (l, cl, ty)) None ps in
   match path with
-  | None -> failwith "Elaboration impossible"
+  | None -> Format.printf "No access to the superclass %s@." n;
+              raise (InvalidOverloading pos)
   | Some (l, cl, ty) ->
     let TName orig = cl in
     List.fold_left (fun expr (TName n) ->
       ERecordAccess (pos, expr, LName ("sc" ^ n)))
       (EVar (pos, Name ("dict" ^ orig), [TyVar (pos, ty)])) l
-(* ERecordAccess (pos, EVar (pos, Name ("dict" ^ cl), []), lname) *)
 
 and extend_expr_with_abs pos ts expr =
   List.fold_right (extend_expr_with_unique_abs pos) ts expr
