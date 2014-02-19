@@ -140,20 +140,17 @@ and is_overloaded pos env ty =
 
 and class_repr pos env ps = function
   (* Abstracted dictionnary *)
-  | Some (n, ((TyVar (_,_)) as t)) ->
+  | Some (n, TyVar (_,_)) ->
     let cl = (String.sub n 5 (String.length n - 5)) in
+    (* List.iter (fun (TName c, _) -> print_endline c) env.classes; *)
     ignore (lookup_class pos (TName cl) env);
-    let c = "dict" ^ (String.sub n 5 (String.length n - 5)) in
-    let path = generate_superclass_access pos env ps (TName cl) in
-    Format.printf "Abstracted: %s@." @@ string_of_expr path;
-    path
+    generate_superclass_access pos env ps (TName cl)
 
   (* Already instantiated dictionnary *)
   | Some (n, ((TyApp (_, TName _, [])) as t)) ->
     let cl = (String.sub n 5 (String.length n - 5)) in
     ignore (lookup_instance pos (TName cl) (TName (repr_of_type t)) env);
     let c = repr_of_type t ^ cl in
-    Format.printf "Instantiated: %s@." c;
     EVar (pos, Name c, [t])
 
   (* Elaborated dictionnaries *)
@@ -161,15 +158,12 @@ and class_repr pos env ps = function
     let cl = (String.sub n 5 (String.length n - 5)) in
     ignore (lookup_instance pos (TName cl) (TName (repr_of_type t)) env);
     let c = repr_of_type t ^ cl in
-    Format.printf "Class: %s@." c;
     let hd = class_repr pos env ps (Some (n, List.hd ts)) in
     let ts = List.tl ts in
-    let res =
-      EApp(pos, EVar (pos, Name c, [t]),
-           List.fold_left (fun acc ty ->
-               let ty = Some (n, ty) in
-               EApp (pos, class_repr pos env ps ty, acc)) hd ts) in
-    Format.printf "res: %s@." @@ string_of_expr res; res
+    EApp(pos, EVar (pos, Name c, [t]),
+         List.fold_left (fun acc ty ->
+             let ty = Some (n, ty) in
+             EApp (pos, class_repr pos env ps ty, acc)) hd ts)
 
   (* The repr always take the result of is_overloaded in case it is Some _ *)
   | None -> assert false
@@ -184,7 +178,20 @@ and string_of_type2 = function
 and expression env (ps : class_predicates) = function
 
   | EVar (pos, ((Name s) as x), tys) ->
-    (EVar (pos, x, tys), type_application pos env x tys)
+    (* Rule OApp *)
+    let tys' = type_application pos env x tys in
+    begin
+      match destruct_tyarrow tys' with
+      | None -> (EVar (pos, x, tys), tys')
+      | Some (ity, oty) -> begin
+        match is_overloaded pos env ity with
+        | None -> (EVar (pos, x, tys), tys')
+        | Some (cl, ty) ->
+          let c = class_repr pos env ps (Some (cl, ty)) in
+          Format.printf "%s@." @@ string_of_expr c;
+          (EApp (pos, (EVar (pos, x, tys)), c), oty)
+        end
+    end
 
   | ELambda (pos, ((x, aty) as b), e') ->
     check_wf_type env KStar aty;
@@ -195,26 +202,16 @@ and expression env (ps : class_predicates) = function
   | EApp (pos, a, b) ->
     let a, a_ty = expression env ps a in
     let b, b_ty = expression env ps b in
+    (* Format.printf "a: %s\nb: %s@." (string_of_expr a) (string_of_expr b); *)
     (* Format.printf "a_ty: %s\nb_ty: %s@." *)
     (*   (string_of_type a_ty) (string_of_type b_ty); *)
     begin match destruct_tyarrow a_ty with
       | None ->
         raise (ApplicationToNonFunctional pos)
       | Some (ity, oty) ->
-        (* Rule OApp *)
-        begin
-          match is_overloaded pos env ity with
-          | Some (cl, ty) ->
-            let c = class_repr pos env ps (Some (cl, ty)) in
-            let ity, oty = match destruct_tyarrow oty with
-                Some (ity, oty) -> ity, oty
-              | None -> assert false in
-            check_equal_types pos b_ty ity;
-            (EApp (pos, EApp (pos, a, c), b), oty)
-          | None ->
-            check_equal_types pos b_ty ity;
-            (EApp (pos, a, b), oty)
-        end
+        check_equal_types pos b_ty ity;
+        (EApp (pos, a, b), oty)
+        (* end *)
     end
 
   | EBinding (pos, vb, e) ->
@@ -636,9 +633,9 @@ and instance_definitions env instances =
   in
   let values, env = step [] env instances in
   (* Format.printf "Here ?@."; *)
-  (* value_binding env (BindRecValue (pos, values)) *)
+  value_binding env (BindRecValue (pos, values))
   (* Format.printf "Nope@."; *)
-  BindRecValue (pos, values), env
+  (* BindRecValue (pos, values), env *)
 
 and instance_definition env instance =
   check_superclasses_instances env instance;
@@ -718,11 +715,11 @@ and extend_record_binding pos env ins ty =
 
   List.fold_left (fun bindings (TName sc) ->
       let sc_ins = repr_of_type ty ^ sc in
-      let expr = if instantiation <> [] then
-          let access = generate_superclass_access pos env
-              ins.instance_typing_context (TName sc) in
-          EApp (pos, EVar (pos, Name sc_ins, instantiation), access)
-        else
+      let expr = (* if instantiation <> [] then *)
+        (*   let access = generate_superclass_access pos env *)
+        (*       ins.instance_typing_context (TName sc) in *)
+        (*   EApp (pos, EVar (pos, Name sc_ins, instantiation), access) *)
+        (* else *)
           EVar (pos, Name sc_ins, instantiation)
       in
       Format.printf "expr: %s@." @@ string_of_expr expr;
@@ -732,16 +729,19 @@ and extend_record_binding pos env ins ty =
 and generate_superclass_access pos env ps (TName n) =
   let sc = TName n in
   let path = List.fold_left (fun acc (ClassPredicate (cl, ty)) ->
+      if (cl = sc) then Some ([], cl, ty) else
       match acc with
-      | Some l -> acc
-      | None -> find_path pos cl sc env) None ps in
+      | Some (_, _, _) -> acc
+      | None -> match find_path pos cl sc env with
+        | None -> None
+        | Some l -> Some (l, cl, ty)) None ps in
   match path with
   | None -> failwith "Elaboration impossible"
-  | Some l ->
-    let TName orig = List.hd l in
+  | Some (l, cl, ty) ->
+    let TName orig = cl in
     List.fold_left (fun expr (TName n) ->
       ERecordAccess (pos, expr, LName ("sc" ^ n)))
-      (EVar (pos, Name ("dict" ^ orig), [])) (List.tl l)
+      (EVar (pos, Name ("dict" ^ orig), [TyVar (pos, ty)])) l
 (* ERecordAccess (pos, EVar (pos, Name ("dict" ^ cl), []), lname) *)
 
 and extend_expr_with_abs pos ts expr =
