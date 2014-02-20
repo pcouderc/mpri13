@@ -89,6 +89,12 @@ val lookup_member : position -> tname -> t -> tname
 (** [bind_member pos m cl env] binds the overloaded function [m] to its class *)
 val bind_member : position -> tname -> tname -> t -> t
 
+val lookup_class_type : position -> tname -> t -> tname
+
+val bind_class_type : position -> tname -> tname -> t -> t
+
+val get_type_of_class : position -> tname -> t -> tname
+
 (* (\** [bind_class_to_member pos m cl] binds the class [cl] to the already binded *)
 (*   function [m] *\) *)
 (* val bind_class_to_member : position -> tname -> tname -> t -> t *)

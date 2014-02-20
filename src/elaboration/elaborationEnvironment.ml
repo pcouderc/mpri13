@@ -13,7 +13,8 @@ type t = {
   classes      : (tname * (class_definition * class_tree)) list;
   labels       : (lname * (tnames * Types.t * tname)) list;
   instances    : ((tname * tname) * instance_definition) list;
-  members      : (tname * tname) list
+  members      : (tname * tname) list;
+  class_types  : (tname * tname) list
 }
 
 let empty = { values = [];
@@ -21,7 +22,8 @@ let empty = { values = [];
               classes = [];
               labels = [];
               instances = [];
-              members = []
+              members = [];
+              class_types = []
             }
 
 let values env = env.values
@@ -102,13 +104,6 @@ let is_superclass pos k1 k2 env =
   | None -> false
   | Some _ -> true
 
-(* let rec find_superclass_path pos k1 k2 env = *)
-(*   let sclasses = lookup_superclasses pos k1 env in *)
-(*   let path = List.fold_left (fun acc k -> *)
-(*       if k = k2 then Some (k1 :: acc) else find_superclass_patch sclasses in *)
-(*   match path with *)
-(*   | [] *)
-
 let bind_type_variable t env =
   bind_type t KStar (TypeDef (undefined_position, KStar, t, DAlgebraic [])) env
 
@@ -126,11 +121,6 @@ let bind_label pos l ts ty rtcon env =
     { env with labels = (l, (ts, ty, rtcon)) :: env.labels }
 
 let lookup_instance pos classname index env =
-  (* if !Misc.debug then Format.printf ("In lookup@."); *)
-  (* let _s (TName name) = name in *)
-  (* List.iter (fun ((_,_),ins) -> *)
-  (*     Format.printf "%s, %s@." (_s ins.instance_class_name) (_s ins.instance_index)) *)
-  (*   env.instances; *)
   try
     List.assoc (classname, index) env.instances
   with Not_found ->
@@ -142,7 +132,6 @@ let lookup_class_instances pos classname env =
     [] env.instances
 
 let bind_instance ins env =
-  (* Format.printf ("In binding@."); *)
   let classname = ins.instance_class_name in
   let index = ins.instance_index in
   try
@@ -156,17 +145,25 @@ let bind_instance ins env =
 let lookup_member pos tname env =
     List.assoc tname env.members
 
-(* let bind_class_to_member pos mem cl env = *)
-(*   { env with members = (m, cl) :: env.members } *)
-(*     (\* members = List.map (fun (m, cls) -> *\) *)
-(*     (\*     if m = mem then (m, cl :: cls) else (m, cls)) env.members } *\) *)
-
 let bind_member pos ((TName n) as tname) ty env =
   try
     ignore (lookup_member pos tname env);
     raise (OverloadedSymbolCannotBeBound (pos, Name n))
   with Not_found ->
     { env with members = (tname, ty) :: env.members }
+
+let lookup_class_type pos tname env =
+  List.assoc tname env.class_types
+
+let get_type_of_class pos tname env =
+  fst @@ List.find (fun (_, cl) -> cl = tname) env.class_types
+
+let bind_class_type pos ty cl env =
+  try
+    ignore (lookup_class_type pos ty env);
+    raise (AlreadyDefinedClass (pos, ty))
+  with Not_found ->
+    { env with class_types = (ty, cl) :: env.class_types }
 
 let initial =
   let primitive_type t k = TypeDef (undefined_position, k, t, DAlgebraic []) in
