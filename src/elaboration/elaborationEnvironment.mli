@@ -84,11 +84,11 @@ val bind_instance : instance_definition -> t -> t
 
 (** [lookup_member pos m env] returns the classes (origin + superclasses) that
   bind the overloaded function [m] *)
-val lookup_member : position -> tname -> t -> tname list
+val lookup_member : position -> tname -> t -> tname
 
 (** [bind_member pos m cl env] binds the overloaded function [m] to its class *)
 val bind_member : position -> tname -> tname -> t -> t
 
-(** [bind_class_to_member pos m cl] binds the class [cl] to the already binded
-  function [m] *)
-val bind_class_to_member : position -> tname -> tname -> t -> t
+(* (\** [bind_class_to_member pos m cl] binds the class [cl] to the already binded *)
+(*   function [m] *\) *)
+(* val bind_class_to_member : position -> tname -> tname -> t -> t *)

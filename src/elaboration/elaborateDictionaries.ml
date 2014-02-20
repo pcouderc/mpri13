@@ -136,14 +136,16 @@ and is_overloaded pos env ty =
     else None
   | _ -> None
 
+(* and is_overloaded pos env n =  *)
+(*   try lookup *)
+
 and class_repr pos env ps = function
   | Some (n, TyVar (_,_)) ->
     let cl = (String.sub n 5 (String.length n - 5)) in
     ignore (lookup_class pos (TName cl) env);
     generate_superclass_access pos env ps (TName cl)
 
-  | Some (n, ((TyApp (_, TName _, [])) as t))
-  | Some (n, ((TyApp (_, TName _, _)) as t)) when ps = [] -> (* Really ? *)
+  | Some (n, ((TyApp (_, TName _, [])) as t)) ->
     let cl = (String.sub n 5 (String.length n - 5)) in
     ignore (lookup_instance pos (TName cl) (TName (repr_of_type t)) env);
     let c = repr_of_type t ^ cl in
@@ -151,14 +153,17 @@ and class_repr pos env ps = function
 
   | Some (n, ((TyApp (_, TName _, ts)) as t)) ->
     let cl = (String.sub n 5 (String.length n - 5)) in
-    ignore (lookup_instance pos (TName cl) (TName (repr_of_type t)) env);
+    let def = (lookup_instance pos (TName cl) (TName (repr_of_type t)) env) in
     let c = repr_of_type t ^ cl in
-    let hd = class_repr pos env ps (Some (n, List.hd ts)) in
-    let ts = List.tl ts in
-    EApp(pos, EVar (pos, Name c, [t]),
-         List.fold_left (fun acc ty ->
-             let ty = Some (n, ty) in
-             EApp (pos, class_repr pos env ps ty, acc)) hd ts)
+    if def.instance_typing_context  <> [] then
+      let hd = class_repr pos env ps (Some (n, List.hd ts)) in
+      let ts = List.tl ts in
+      EApp(pos, EVar (pos, Name c, [t]),
+           List.fold_left (fun acc ty ->
+               let ty = Some (n, ty) in
+               EApp (pos, class_repr pos env ps ty, acc)) hd ts)
+    else
+      EVar (pos, Name c, [t])
 
   (* The repr always take the result of is_overloaded in case it is Some _ *)
   | None -> assert false

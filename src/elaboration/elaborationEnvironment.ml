@@ -13,7 +13,7 @@ type t = {
   classes      : (tname * (class_definition * class_tree)) list;
   labels       : (lname * (tnames * Types.t * tname)) list;
   instances    : ((tname * tname) * instance_definition) list;
-  members      : (tname * tname list) list
+  members      : (tname * tname) list
 }
 
 let empty = { values = [];
@@ -156,17 +156,17 @@ let bind_instance ins env =
 let lookup_member pos tname env =
     List.assoc tname env.members
 
-let bind_class_to_member pos mem cl env =
-  { env with
-    members = List.map (fun (m, cls) ->
-        if m = mem then (m, cl :: cls) else (m, cls)) env.members }
+(* let bind_class_to_member pos mem cl env = *)
+(*   { env with members = (m, cl) :: env.members } *)
+(*     (\* members = List.map (fun (m, cls) -> *\) *)
+(*     (\*     if m = mem then (m, cl :: cls) else (m, cls)) env.members } *\) *)
 
 let bind_member pos ((TName n) as tname) ty env =
   try
     ignore (lookup_member pos tname env);
     raise (OverloadedSymbolCannotBeBound (pos, Name n))
   with Not_found ->
-    { env with members = (tname, [ty]) :: env.members }
+    { env with members = (tname, ty) :: env.members }
 
 let initial =
   let primitive_type t k = TypeDef (undefined_position, k, t, DAlgebraic []) in
