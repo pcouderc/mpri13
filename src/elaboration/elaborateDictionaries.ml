@@ -177,25 +177,42 @@ and string_of_type2 = function
     Format.sprintf "%s(%s)" n
       (List.fold_left (fun acc t -> acc ^ ", " ^ (string_of_type2 t)) "" ts)
 
+and extend_if_overloaded pos env ps ty expr =
+  (* We look if it's an value or an abstraction *)
+  match destruct_tyarrow ty with
+  | None -> expr, ty
+  | Some (ity, oty) -> begin
+      (* If it's a type that asks for an overloaded record as
+         first argument *)
+      match is_overloaded pos env ity with
+      | None -> expr, ty
+      | Some (cl, ty) ->
+        let c = class_repr pos env ps (Some (cl, ty)) in
+        extend_if_overloaded pos env ps oty (EApp (pos, expr, c))
+    end
+
 and expression env (ps : class_predicates) = function
 
   | EVar (pos, ((Name s) as x), tys) ->
     (* Rule OApp *)
     let tys' = type_application pos env x tys in
-    begin
-      (* We look if it's an value or an abstraction *)
-      match destruct_tyarrow tys' with
-      | None -> (EVar (pos, x, tys), tys')
-      | Some (ity, oty) -> begin
-          (* If it's a type that asks for an overloaded record as
-            first argument *)
-        match is_overloaded pos env ity with
-        | None -> (EVar (pos, x, tys), tys')
-        | Some (cl, ty) ->
-          let c = class_repr pos env ps (Some (cl, ty)) in
-          (EApp (pos, (EVar (pos, x, tys)), c), oty)
-        end
-    end
+    let e, ty = extend_if_overloaded pos env ps tys' (EVar (pos, x, tys)) in
+    (* Format.printf "expr: %s@\n" @@ string_of_expr e; *)
+    e, ty
+    (* begin *)
+    (*   (\* We look if it's an value or an abstraction *\) *)
+    (*   match destruct_tyarrow tys' with *)
+    (*   | None -> (EVar (pos, x, tys), tys') *)
+    (*   | Some (ity, oty) -> begin *)
+    (*       (\* If it's a type that asks for an overloaded record as *)
+    (*         first argument *\) *)
+    (*     match is_overloaded pos env ity with *)
+    (*     | None -> (EVar (pos, x, tys), tys') *)
+    (*     | Some (cl, ty) -> *)
+    (*       let c = class_repr pos env ps (Some (cl, ty)) in *)
+    (*       (EApp (pos, (EVar (pos, x, tys)), c), oty) *)
+    (*     end *)
+    (* end *)
 
   | ELambda (pos, ((x, aty) as b), e') ->
     check_wf_type env KStar aty;
@@ -284,12 +301,18 @@ and expression env (ps : class_predicates) = function
     assert false
 
   | ERecordCon (pos, n, i, rbs) ->
+    (* Format.printf "record: %s@\n" @@ string_of_expr (ERecordCon (pos, n, i, rbs)); *)
     let rbstys = List.map (record_binding env ps) rbs in
     let rec check others rty = function
       | [] ->
         begin match rty with
           | Some (_, TyApp (_, rtcon, _)) ->
+            (* Format.printf "Record type: %s@\n" @@ string_of_type ty; *)
             let labels = labels_of rtcon env in
+            (* Format.printf "Labels waiting for: %s@\n" @@ *)
+            (* List.fold_left (fun acc (LName n) -> acc ^ ";" ^ n) "" labels; *)
+            (* Format.printf "Labels given for: %s@\n" @@ *)
+            (* List.fold_left (fun acc (RecordBinding (LName n, _)) -> acc ^ ";" ^ n) "" others; *)
             if (List.length labels <> List.length others) then
               raise (InvalidRecordConstruction pos)
           | _ -> assert false (** Because we forbid empty record. *)
@@ -615,7 +638,7 @@ and create_class_record env c =
       let sc_field = class_typename pos (TName sc) env in
       let ty = TyApp
           (pos, sc_field, [TyVar (pos, c.class_parameter)]) in
-    (pos, LName ("sc" ^ n ^ sc), ty) :: acc) c.class_members c.superclasses in
+    (pos, LName ("sc" ^ n ^ "_" ^ sc), ty) :: acc) c.class_members c.superclasses in
 
   (* Returns the type definition and checks the elaborated record as a normal
     type *)
@@ -795,7 +818,7 @@ and extend_record_binding pos env ins ty =
   List.fold_left (fun bindings (TName sc) ->
       let sc_ins = repr_of_type ty ^ sc in
       let expr = EVar (pos, Name sc_ins, instantiation) in
-      RecordBinding (LName ("sc" ^ n ^ sc), expr) :: bindings)
+      RecordBinding (LName ("sc" ^ n ^ "_" ^ sc), expr) :: bindings)
     ins.instance_members (lookup_superclasses pos ins.instance_class_name env)
 
 (* Creates the records accesses from a class to a specific superclass, if there is *)
@@ -813,9 +836,14 @@ and generate_superclass_access pos env ps (TName n) =
               raise (InvalidOverloading pos)
   | Some (l, cl, ty) ->
     let TName orig = cl in
-    List.fold_left (fun expr (TName n) ->
-      ERecordAccess (pos, expr, LName ("sc" ^ orig ^ n)))
-      (EVar (pos, Name ("dict" ^ orig), [TyVar (pos, ty)])) l
+    let rec step expr prev = function
+      | [] -> expr
+      | TName n :: tl when n = prev -> step expr prev tl
+      | TName n :: tl ->
+        step (ERecordAccess (pos, expr, LName ("sc" ^ prev ^ "_" ^ n))) n tl
+    in
+    step (EVar (pos, Name ("dict" ^ orig), [TyVar (pos, ty)]))
+      orig (List.rev l)
 
 (* Extends an expression with types abstraction *)
 and extend_expr_with_abs pos ts expr =

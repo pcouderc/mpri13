@@ -94,7 +94,7 @@ let find_path pos k1 k2 env =
       match t with
       | Class (k, []) -> if k = k2 then Some (k :: acc) else None
       | Class (k, l) -> if k = k2 then Some (k :: acc) else
-          List.fold_left find (Some acc) l
+          List.fold_left find (Some (k :: acc)) l
   in
   let ct = lookup_class_tree pos k1 env in
   find (Some []) ct
