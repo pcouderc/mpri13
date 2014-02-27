@@ -13,6 +13,10 @@ exception Found
 let string_of_type ty = ASTio.(XAST.(to_string pprint_ml_type ty))
 let string_of_expr e = ASTio.(XAST.(to_string pprint_expression e))
 
+(* Small hack to be able to find if a name has already been used once, and in
+   that case raise an exception if a class member has the same name *)
+let used_names = Hashtbl.create 19
+
 let string_of_instance ins =
   match ins.instance_index, ins.instance_class_name with
   | TName index, TName cn -> Format.sprintf "%s, %s;" index cn
@@ -283,6 +287,13 @@ and expression env (ps : class_predicates) = function
     let rbstys = List.map (record_binding env ps) rbs in
     let rec check others rty = function
       | [] ->
+        begin match rty with
+          | Some (_, TyApp (_, rtcon, _)) ->
+            let labels = labels_of rtcon env in
+            if (List.length labels <> List.length others) then
+              raise (InvalidRecordConstruction pos)
+          | _ -> assert false (** Because we forbid empty record. *)
+        end;
         List.rev others, rty
       | (RecordBinding (l, e), ty) :: ls ->
         if List.exists (fun (RecordBinding (l', _)) -> l = l') others then
@@ -438,7 +449,7 @@ and value_definition env (ValueDef (pos, ts, ps, (x, xty), e)) =
   let env' = introduce_type_parameters env ts in
   check_wf_scheme env ts xty;
   let Name n = x in
-  check_value_name pos env n;
+  let env = check_value_name pos env n in
   is_canonical pos env ps;
 
   (* Let restriction, with values that cannot use a typing context *)
@@ -506,7 +517,9 @@ and check_value_name pos env name =
   try
     ignore (lookup_member pos (TName name) env);
     raise (InvalidOverloading pos)
-  with Not_found -> ()
+  with Not_found ->
+    Hashtbl.add used_names name name;
+    bind_name pos (Name name) env
 
 (* Class definition *)
 
@@ -551,9 +564,9 @@ and check_members env sclasses param = function
   | (pos, (LName n), ty) :: l ->
     check_wf_scheme env [param] ty;
     try
-      ignore (lookup pos (Name n) env);
+      ignore (Hashtbl.find used_names n);
       raise (InvalidOverloading pos)
-    with UnboundIdentifier (_, _) -> ();
+    with Not_found -> ();
     check_members env sclasses param l
 
 (* Verifies that a superclass doesn't already defines a member with this

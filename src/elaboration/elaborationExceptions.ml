@@ -36,3 +36,5 @@ exception SuperclassParameterDifferent of position * tname * tname
 exception FunctionDefinedInSClass of position * tname * lname
 exception UnboundInstance of position * tname * tname
 exception AlreadyDefinedInstance of position * tname * tname
+
+exception InvalidRecordConstruction of position

@@ -14,7 +14,8 @@ type t = {
   labels       : (lname * (tnames * Types.t * tname)) list;
   instances    : ((tname * tname) * instance_definition) list;
   members      : (tname * tname) list;
-  class_types  : (tname * tname) list
+  class_types  : (tname * tname) list;
+  names        : name list
 }
 
 let empty = { values = [];
@@ -23,7 +24,8 @@ let empty = { values = [];
               labels = [];
               instances = [];
               members = [];
-              class_types = []
+              class_types = [];
+              names = []
             }
 
 let values env = env.values
@@ -107,6 +109,10 @@ let is_superclass pos k1 k2 env =
 let bind_type_variable t env =
   bind_type t KStar (TypeDef (undefined_position, KStar, t, DAlgebraic [])) env
 
+let labels_of rtcon env =
+  let p (_, (_, _, rtcon')) = rtcon = rtcon' in
+  List.(fst (split (filter p env.labels)))
+
 let lookup_label pos l env =
   try
     List.assoc l env.labels
@@ -164,6 +170,15 @@ let bind_class_type pos ty cl env =
     raise (AlreadyDefinedClass (pos, ty))
   with Not_found ->
     { env with class_types = (ty, cl) :: env.class_types }
+
+let lookup_name pos n env =
+  List.find (fun v -> n = v) env.names
+
+let bind_name pos (Name n) env =
+  try
+    ignore (lookup_name pos (Name n) env);
+    raise (LabelAlreadyTaken (pos, LName n))
+  with Not_found -> { env with names = (Name n) :: env.names }
 
 let initial =
   let primitive_type t k = TypeDef (undefined_position, k, t, DAlgebraic []) in

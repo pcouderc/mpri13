@@ -95,6 +95,9 @@ val bind_class_type : position -> tname -> tname -> t -> t
 
 val get_type_of_class : position -> tname -> t -> tname
 
-(* (\** [bind_class_to_member pos m cl] binds the class [cl] to the already binded *)
-(*   function [m] *\) *)
-(* val bind_class_to_member : position -> tname -> tname -> t -> t *)
+val lookup_name : position -> name -> t -> name
+
+val bind_name : position -> name -> t -> t
+
+(** [labels_of rtcon e] returns all the labels of the record [rtcon]. *)
+val labels_of : tname -> t -> lname list
