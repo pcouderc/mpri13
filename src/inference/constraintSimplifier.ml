@@ -40,7 +40,7 @@ let equivalent vl cl v ps =
     [v_1;...;v_M] in [pool]. It raises [Unsat] if the given constraint
     is equivalent to [false]. *)
 let canonicalize pos pool k =
-  (* Todo ? =>
+  (* Todo ? => Not quite sure...
      - Get each equivalences of k
      - Assemble them and remove the doubles
      - Get the variable in pool
